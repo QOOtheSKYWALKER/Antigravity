@@ -701,6 +701,24 @@ btnRocket.addEventListener('click', () => {
     btnRocket.blur();
 });
 
+// ===== Keypad Input =====
+document.querySelectorAll('.key-btn').forEach(btn => {
+    btn.addEventListener('click', (e) => {
+        // Prevent focus loss to keep input smooth (though for buttons it usually doesn't focus text)
+        e.preventDefault();
+        const num = btn.dataset.num;
+
+        if (num) {
+            inputNumber(parseInt(num));
+        } else if (btn.id === 'key-delete') {
+            clearCell();
+        } else if (btn.id === 'key-memo') {
+            toggleMemoMode();
+        }
+        btn.blur();
+    });
+});
+
 btnUndo.addEventListener('click', () => undo());
 btnRedo.addEventListener('click', () => redo());
 
