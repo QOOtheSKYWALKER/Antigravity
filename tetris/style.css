@@ -1,0 +1,93 @@
+/* デザインシステム：ダークモード基調 */
+:root {
+    --bg-color: #121212;
+    --panel-bg: #1e1e1e;
+    --text-color: #e0e0e0;
+    --accent-color: #bb86fc;
+    --border-color: #333;
+    --font-family: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+}
+
+body {
+    background-color: var(--bg-color);
+    color: var(--/Users/macbookair/Documents/Antigravity/tetris/index.htmltext-color);
+    font-family: var(--font-family);
+    margin: 0;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    height: 100vh;
+    overflow: hidden;
+}
+
+.container {
+    display: flex;
+    gap: 30px;
+    background-color: var(--panel-bg);
+    padding: 30px;
+    border-radius: 16px;
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
+    border: 1px solid var(--border-color);
+}
+
+.game-area {
+    text-align: center;
+}
+
+h1 {
+    font-size: 1.5rem;
+    margin-bottom: 20px;
+    letter-spacing: 4px;
+    color: var(--accent-color);
+}
+
+canvas#tetris {
+    background-color: #000;
+    border: 2px solid var(--border-color);
+    border-radius: 4px;
+    box-shadow: inset 0 0 10px rgba(0,0,0,0.8);
+}
+
+.sidebar {
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+    width: 120px;
+}
+
+.info-panel {
+    background-color: #252525;
+    padding: 15px;
+    border-radius: 8px;
+    margin-bottom: 20px;
+    text-align: center;
+}
+
+.info-panel h2 {
+    font-size: 0.8rem;
+    margin: 0 0 10px 0;
+    color: #888;
+    text-transform: uppercase;
+}
+
+.score-value {
+    font-size: 1.5rem;
+    font-weight: bold;
+    color: var(--accent-color);
+}
+
+canvas#next {
+    background-color: #000;
+    border: 1px solid #333;
+    border-radius: 4px;
+}
+
+.controls-guide {
+    font-size: 0.75rem;
+    color: #666;
+    line-height: 1.6;
+}
+
+.controls-guide p {
+    margin: 5px 0;
+}
