@@ -11,20 +11,18 @@
 <body>
     <div class="container">
         <div class="game-area">
-            <h1>SUDOKU</h1>
-            <div id="board" class="board"></div>
-        </div>
-        <div class="sidebar">
-            <div class="info-panel">
-                <h2>DIFFICULTY</h2>
+            <div class="title-bar">
+                <h1>SUDOKU</h1>
                 <div class="difficulty-buttons">
                     <button id="btn-easy" class="diff-btn" data-level="easy">Easy</button>
                     <button id="btn-medium" class="diff-btn" data-level="medium">Medium</button>
                     <button id="btn-hard" class="diff-btn active" data-level="hard">Hard</button>
                 </div>
             </div>
+            <div id="board" class="board"></div>
+        </div>
+        <div class="sidebar">
             <div class="info-panel">
-                <button id="btn-new" class="new-game-btn">新しい問題</button>
                 <button id="btn-reset" class="reset-btn">最初に戻す</button>
                 <button id="btn-rocket" class="rocket-btn">🚀</button>
                 <div class="undo-redo-buttons">
@@ -34,24 +32,15 @@
             </div>
             <div class="info-panel">
                 <div class="mode-toggle-wrapper">
-                    <span class="mode-label mode-label-input active" id="label-input">入力</span>
+                    <span class="mode-label active" id="label-input">入力</span>
                     <label class="toggle-switch">
                         <input type="checkbox" id="memo-toggle">
                         <span class="toggle-slider"></span>
                     </label>
-                    <span class="mode-label mode-label-memo" id="label-memo">メモ</span>
+                    <span class="mode-label" id="label-memo">メモ</span>
                 </div>
             </div>
             <div id="message" class="message"></div>
-            <div class="controls-guide">
-                <p>← → ↑ ↓ : セル移動</p>
-                <p>1〜9 : 数字入力</p>
-                <p>Del / BS : 消去</p>
-                <p>Space : メモ切替</p>
-                <p>Ctrl/⌘+Z : 元に戻す</p>
-                <p>Ctrl/⌘+Y : やり直す</p>
-            </div>
-
             <div id="keypad" class="keypad">
                 <div class="keypad-row">
                     <button class="key-btn" data-num="1">1</button>
@@ -68,10 +57,17 @@
                     <button class="key-btn" data-num="8">8</button>
                     <button class="key-btn" data-num="9">9</button>
                 </div>
-                <div class="keypad-row">
+                <div class="keypad-row keypad-row-single">
                     <button class="key-btn action-btn bg-red" id="key-delete">Del</button>
-                    <button class="key-btn action-btn" id="key-memo">Memo</button>
                 </div>
+            </div>
+            <div class="controls-guide">
+                <p>← → ↑ ↓ : セル移動</p>
+                <p>1〜9 : 数字入力</p>
+                <p>Del / BS : 消去</p>
+                <p>Space : メモ切替</p>
+                <p>Ctrl/⌘+Z : 元に戻す</p>
+                <p>Ctrl/⌘+Y : やり直す</p>
             </div>
         </div>
     </div>

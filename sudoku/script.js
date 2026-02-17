@@ -102,20 +102,13 @@ function countSolutions(grid, limit = 2) {
 
 function generatePuzzle(difficulty) {
     let attempts = 0;
-    const maxAttempts = 1000; // 無限ループ防止、タイムアウト対策
+    const maxAttempts = 1000;
     const startTime = Date.now();
 
     while (attempts < maxAttempts) {
         attempts++;
         if (Date.now() - startTime > 5000) {
-            console.warn(`Time limit exceeded for generating ${difficulty} puzzle.`);
-            // タイムアウト時は、緩和策として直近で生成できたものを返すか、
-            // あるいは完全に失敗とするか。ここでは安全のため、
-            // 条件を満たせなくてもとりあえず返す（あるいはEasyで返す）などのフォールバックがあると良いが、
-            // 一旦は継続トライする。ユーザー体験的にはローディング表示が必要。
-            // 今回は簡易的に、Hardが無理ならMedium、Medium無理ならEasyを許容するなどのロジックを入れるか？
-            // ユーザー要望は「満たさなければ作り直し」なので、できるだけ粘る。
-            // しかしブラウザが固まるのは困るので、5秒で諦めて「生成できた中で最も難しかったもの」を返す等の妥協策を入れます。
+            console.warn(`${difficulty} パズルの生成がタイムアウトしました`);
             break;
         }
 
@@ -127,27 +120,22 @@ function generatePuzzle(difficulty) {
         solution = completeGrid.map(row => [...row]);
         const puzzleGrid = completeGrid.map(row => [...row]);
 
-        // 3. マスを抜く
-        // 難易度に応じて抜く数を調整（あくまで目安。論理的難易度が重要）
-        // Hardは手がかりが少ない方が難しい傾向にあるが、少なくしすぎると多重解になりやすい。
-        const removeCounts = { easy: 35, medium: 45, hard: 50 };
+        // 3. マスを抜く（難易度に応じて調整）
+        const removeCounts = { easy: 38, medium: 44, hard: 50 };
         let toRemove = removeCounts[difficulty] || 40;
 
-        // ランダムに抜く
         const positions = shuffleArray(
             Array.from({ length: 81 }, (_, i) => [Math.floor(i / 9), i % 9])
         );
 
         for (const [r, c] of positions) {
             if (toRemove <= 0) break;
-
             const backup = puzzleGrid[r][c];
             puzzleGrid[r][c] = 0;
 
-            // 唯一解チェック（高速なバックトラッキング版を使用）
             const solutions = countSolutions(puzzleGrid.map(row => [...row]), 2);
             if (solutions !== 1) {
-                puzzleGrid[r][c] = backup; // 戻す
+                puzzleGrid[r][c] = backup;
             } else {
                 toRemove--;
             }
@@ -158,27 +146,12 @@ function generatePuzzle(difficulty) {
         const result = solver.solve();
 
         // 目標難易度と一致するか確認
-        // Hard要求なら result.difficulty === 'hard' が必要
-        // Medium要求なら result.difficulty === 'medium' (or 'hard'?) 
-        // -> User request: "MEDIUM: minimal double/triple... EASY: below that"
-        // So Easy should be solvable by Basic.
-        // Medium should require Medium strategies (and implies it is NOT Hard, or at least NOT Easy).
-        // If we want exact match:
-
-        if (result.solved) {
-            if (difficulty === 'hard' && result.difficulty === 'hard') return puzzleGrid;
-            if (difficulty === 'medium' && result.difficulty === 'medium') return puzzleGrid;
-            // EASYはHidden Singleが必要だがPair以上は不要
-            if (difficulty === 'easy' && result.difficulty === 'easy') return puzzleGrid;
+        if (result.solved && result.difficulty === difficulty) {
+            return puzzleGrid;
         }
-
-        // 一致しなければ再試行
     }
 
-    console.warn(`Failed to generate ${difficulty} puzzle within attempts. Check console for details.`);
-    // フォールバック: 再帰的に呼び出すとスタックオーバーフローの危険があるため、
-    // ここで生成された中でもっともらしいものを返すなどの処理が理想だが、
-    // 既存コードをベースにとりあえず別の（簡単な）問題を返す。
+    console.warn(`${difficulty} パズルの生成に失敗。フォールバック実行`);
     return generatePuzzle('easy');
 }
 
@@ -577,10 +550,6 @@ document.querySelectorAll('.diff-btn').forEach(btn => {
     });
 });
 
-document.getElementById('btn-new').addEventListener('click', () => {
-    initGame(currentDifficulty);
-});
-
 document.getElementById('btn-reset').addEventListener('click', () => {
     if (confirm('本当に最初の状態に戻しますか？\n入力した数字やメモはすべて消去されます。')) {
         resetBoard();
@@ -614,10 +583,10 @@ function handleRocket() {
         // Solverの候補（candidates）と現在のメモ（memos）は別物。
         // Rocketボタンの「確定」は「論理的に1つしか入らない場所」
 
-        // Solverで1ステップだけ進める（Basicのみ）
+        // Solverで1ステップ進める（Naked Single + Hidden Single）
         let stepChanged = false;
-        // Naked Singleのみ適用（候補が1つしか残っていないセルを埋める）
         if (solver.applyNakedSingle()) stepChanged = true;
+        else if (solver.applyHiddenSingle()) stepChanged = true;
 
         if (stepChanged) {
             changesMade = true;
@@ -694,10 +663,7 @@ function handleRocket() {
     lastActionWasRocket = true; // フラグセット
 }
 
-// 他の操作でフラグをリセットする必要がある
-// inputNumber, clearCell, undo, redo, initGame 等で lastActionWasRocket = false;
 
-// ...
 
 btnRocket.addEventListener('click', () => {
     handleRocket();
@@ -720,19 +686,15 @@ labelMemo.addEventListener('click', () => {
     if (!memoMode) toggleMemoMode();
 });
 
-// ===== Keypad Input =====
+// ===== キーパッド入力 =====
 document.querySelectorAll('.key-btn').forEach(btn => {
     btn.addEventListener('click', (e) => {
-        // Prevent focus loss to keep input smooth (though for buttons it usually doesn't focus text)
         e.preventDefault();
         const num = btn.dataset.num;
-
         if (num) {
             inputNumber(parseInt(num));
         } else if (btn.id === 'key-delete') {
             clearCell();
-        } else if (btn.id === 'key-memo') {
-            toggleMemoMode();
         }
         btn.blur();
     });

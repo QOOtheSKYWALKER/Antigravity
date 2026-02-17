@@ -79,19 +79,23 @@ class SudokuLogicalSolver {
         while (changed && !this.isSolved()) {
             changed = false;
 
-            // 1. Basic Strategies
+            // 1. Basic (Singles)
             if (this.applyNakedSingle()) { changed = true; continue; }
             if (this.applyHiddenSingle()) { changed = true; continue; }
 
-            // 2. Medium Strategies (TODO)
+            // 2. Easy (Pairs, Locked Candidates)
             if (this.applyNakedPair()) { changed = true; continue; }
-            if (this.applyHiddenPair()) { changed = true; continue; }
-            if (this.applyLockedCandidates()) { changed = true; continue; } // Intersection Removal
+            if (this.applyLockedCandidates()) { changed = true; continue; }
 
-            // 3. Hard Strategies (TODO)
+            // 3. Medium (Hidden Pairs)
+            if (this.applyHiddenPair()) { changed = true; continue; }
+
+            // 4. Hard (Fish, Wings, Skyscraper)
             if (this.applyXWing()) { changed = true; continue; }
             if (this.applyYWing()) { changed = true; continue; }
             if (this.applySwordfish()) { changed = true; continue; }
+            if (this.applySkyscraper()) { changed = true; continue; }
+            if (this.applyWWing()) { changed = true; continue; }
         }
 
         return {
@@ -111,24 +115,26 @@ class SudokuLogicalSolver {
     }
 
     calculateDifficulty() {
-        // テクニックごとの難易度マッピング
+        // EASY: Locked Candidates / Naked Pair が必要
+        // MEDIUM: Hidden Pair が必要
+        // HARD: X-Wing / Y-Wing / Swordfish / Skyscraper / W-Wing が必要
         const levels = {
-            'Naked Single': 'trivial',
-            'Hidden Single': 'easy',
-            'Naked Pair': 'medium',
+            'Naked Single': 'basic',
+            'Hidden Single': 'basic',
+            'Naked Pair': 'easy',
+            'Locked Candidates': 'easy',
+            'Locked Candidates (Pointing)': 'easy',
+            'Locked Candidates (Claiming)': 'easy',
             'Hidden Pair': 'medium',
-            'Locked Candidates': 'medium',
-            'Locked Candidates (Pointing)': 'medium',
-            'Locked Candidates (Claiming)': 'medium',
             'X-Wing': 'hard',
             'Y-Wing': 'hard',
-            'Swordfish': 'hard'
+            'Swordfish': 'hard',
+            'Skyscraper': 'hard',
+            'W-Wing': 'hard'
         };
 
-        let maxDifficulty = 'trivial'; // Naked Singleのみの場合
-
-        // 優先度定義 (数値が高いほど難しい)
-        const rank = { 'trivial': 0, 'easy': 1, 'medium': 2, 'hard': 3 };
+        let maxDifficulty = 'basic';
+        const rank = { 'basic': 0, 'easy': 1, 'medium': 2, 'hard': 3 };
 
         for (const log of this.difficultyLog) {
             const diff = levels[log.technique];
@@ -723,6 +729,195 @@ class SudokuLogicalSolver {
                                 }
                             }
                         }
+                    }
+                }
+            }
+        }
+
+        return changed;
+    }
+
+    /**
+     * Skyscraper (Turbot Fish の一種)
+     * ある数字が2つの列(or行)それぞれにちょうど2箇所ずつあり、
+     * そのうち片方の端が同じ行(or列)を共有する場合、
+     * もう片方の端の両方が見えるセルからその数字を除外できる。
+     */
+    applySkyscraper() {
+        let changed = false;
+
+        for (let num = 1; num <= 9; num++) {
+            // 列ベース: 各列で候補numが正確に2箇所にある列を収集
+            const biValueCols = [];
+            for (let c = 0; c < 9; c++) {
+                const rows = [];
+                for (let r = 0; r < 9; r++) {
+                    if (this.grid[r][c] === 0 && this.candidates[r][c].has(num)) {
+                        rows.push(r);
+                    }
+                }
+                if (rows.length === 2) {
+                    biValueCols.push({ c, rows });
+                }
+            }
+
+            // 2列のペアを検査
+            for (let i = 0; i < biValueCols.length; i++) {
+                for (let j = i + 1; j < biValueCols.length; j++) {
+                    const a = biValueCols[i];
+                    const b = biValueCols[j];
+
+                    // 片方の端が同じ行を共有するケースを探す
+                    for (let ai = 0; ai < 2; ai++) {
+                        for (let bi = 0; bi < 2; bi++) {
+                            if (a.rows[ai] === b.rows[bi]) {
+                                // 共有行: a.rows[ai]
+                                // 残りの端: a.rows[1-ai], b.rows[1-bi]
+                                const rA = a.rows[1 - ai];
+                                const cA = a.c;
+                                const rB = b.rows[1 - bi];
+                                const cB = b.c;
+
+                                // 両方の端が見えるセルから候補を除外
+                                for (let r = 0; r < 9; r++) {
+                                    for (let c = 0; c < 9; c++) {
+                                        if (this.grid[r][c] === 0 && this.candidates[r][c].has(num)) {
+                                            if (this.sees(r, c, rA, cA) && this.sees(r, c, rB, cB)) {
+                                                if (!(r === rA && c === cA) && !(r === rB && c === cB)) {
+                                                    this.candidates[r][c].delete(num);
+                                                    changed = true;
+                                                    this.difficultyLog.push({ technique: 'Skyscraper', num, cells: [[rA, cA], [rB, cB]] });
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            // 行ベース
+            const biValueRows = [];
+            for (let r = 0; r < 9; r++) {
+                const cols = [];
+                for (let c = 0; c < 9; c++) {
+                    if (this.grid[r][c] === 0 && this.candidates[r][c].has(num)) {
+                        cols.push(c);
+                    }
+                }
+                if (cols.length === 2) {
+                    biValueRows.push({ r, cols });
+                }
+            }
+
+            for (let i = 0; i < biValueRows.length; i++) {
+                for (let j = i + 1; j < biValueRows.length; j++) {
+                    const a = biValueRows[i];
+                    const b = biValueRows[j];
+
+                    for (let ai = 0; ai < 2; ai++) {
+                        for (let bi = 0; bi < 2; bi++) {
+                            if (a.cols[ai] === b.cols[bi]) {
+                                const rA = a.r;
+                                const cA = a.cols[1 - ai];
+                                const rB = b.r;
+                                const cB = b.cols[1 - bi];
+
+                                for (let r = 0; r < 9; r++) {
+                                    for (let c = 0; c < 9; c++) {
+                                        if (this.grid[r][c] === 0 && this.candidates[r][c].has(num)) {
+                                            if (this.sees(r, c, rA, cA) && this.sees(r, c, rB, cB)) {
+                                                if (!(r === rA && c === cA) && !(r === rB && c === cB)) {
+                                                    this.candidates[r][c].delete(num);
+                                                    changed = true;
+                                                    this.difficultyLog.push({ technique: 'Skyscraper', num, cells: [[rA, cA], [rB, cB]] });
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        return changed;
+    }
+
+    /**
+     * W-Wing
+     * 同じ2つの候補{X,Y}を持つ2つのセルA, Bがあり、
+     * AとBの間に「強いリンク」（ある行/列/ブロック内でYが2箇所のみ）で
+     * 接続されているとき、A, Bの両方が見えるセルからXを除外できる。
+     */
+    applyWWing() {
+        let changed = false;
+
+        // 候補がちょうど2つのセルを収集
+        const biValueCells = [];
+        for (let r = 0; r < 9; r++) {
+            for (let c = 0; c < 9; c++) {
+                if (this.grid[r][c] === 0 && this.candidates[r][c].size === 2) {
+                    const cands = [...this.candidates[r][c]];
+                    biValueCells.push({ r, c, cands });
+                }
+            }
+        }
+
+        // 同じペアを持つ2セルの組み合わせを検査
+        for (let i = 0; i < biValueCells.length; i++) {
+            for (let j = i + 1; j < biValueCells.length; j++) {
+                const a = biValueCells[i];
+                const b = biValueCells[j];
+
+                // 同じ2候補か
+                if (a.cands[0] !== b.cands[0] || a.cands[1] !== b.cands[1]) continue;
+                // 互いに見えない（見えるならNaked Pairで処理済み）
+                if (this.sees(a.r, a.c, b.r, b.c)) continue;
+
+                const [x, y] = a.cands;
+
+                // yについて強いリンクを探す（yの2つ目の候補も可）
+                for (const linkVal of [x, y]) {
+                    const elimVal = linkVal === x ? y : x;
+
+                    // 全リージョンでlinkValが正確に2箇所にあるリンクを探す
+                    const regions = this.getAllRegions();
+                    for (const region of regions) {
+                        const cellsWithVal = region.filter(cell =>
+                            this.grid[cell.r][cell.c] === 0 && this.candidates[cell.r][cell.c].has(linkVal)
+                        );
+
+                        if (cellsWithVal.length !== 2) continue;
+
+                        const [p, q] = cellsWithVal;
+
+                        // pがaを見て、qがbを見る、またはその逆
+                        const case1 = this.sees(p.r, p.c, a.r, a.c) && this.sees(q.r, q.c, b.r, b.c);
+                        const case2 = this.sees(p.r, p.c, b.r, b.c) && this.sees(q.r, q.c, a.r, a.c);
+
+                        if (!case1 && !case2) continue;
+
+                        // A, Bの両方が見えるセルからelimValを除外
+                        for (let r = 0; r < 9; r++) {
+                            for (let c = 0; c < 9; c++) {
+                                if (this.grid[r][c] === 0 && this.candidates[r][c].has(elimVal)) {
+                                    if (this.sees(r, c, a.r, a.c) && this.sees(r, c, b.r, b.c)) {
+                                        if (!(r === a.r && c === a.c) && !(r === b.r && c === b.c)) {
+                                            this.candidates[r][c].delete(elimVal);
+                                            changed = true;
+                                            this.difficultyLog.push({ technique: 'W-Wing', num: elimVal, cells: [[a.r, a.c], [b.r, b.c]] });
+                                        }
+                                    }
+                                }
+                            }
+                        }
+
+                        if (changed) return true;
                     }
                 }
             }
