@@ -620,9 +620,21 @@ document.addEventListener('keydown', (e) => {
 
 document.querySelectorAll('.diff-btn').forEach(btn => {
     btn.addEventListener('click', () => {
-        document.querySelectorAll('.diff-btn').forEach(b => b.classList.remove('active'));
+        // 生成中は全ボタン無効化
+        const allBtns = document.querySelectorAll('.diff-btn');
+        allBtns.forEach(b => {
+            b.classList.remove('active');
+            b.classList.add('generating');
+        });
         btn.classList.add('active');
-        initGame(btn.dataset.level);
+
+        // アニメーションを先に描画させてから生成開始
+        requestAnimationFrame(() => {
+            setTimeout(() => {
+                initGame(btn.dataset.level);
+                allBtns.forEach(b => b.classList.remove('generating'));
+            }, 50);
+        });
     });
 });
 

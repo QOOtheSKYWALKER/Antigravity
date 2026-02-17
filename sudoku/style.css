@@ -90,6 +90,26 @@ h1 {
     font-weight: bold;
 }
 
+.diff-btn.generating {
+    cursor: not-allowed;
+    pointer-events: none;
+    animation: firefly-pulse 1.6s ease-in-out infinite;
+}
+
+@keyframes firefly-pulse {
+
+    0%,
+    100% {
+        box-shadow: 0 0 4px rgba(100, 181, 246, 0.2);
+        opacity: 0.6;
+    }
+
+    50% {
+        box-shadow: 0 0 18px rgba(100, 181, 246, 0.7), 0 0 36px rgba(100, 181, 246, 0.3);
+        opacity: 1;
+    }
+}
+
 /* ===== 盤面 ===== */
 .board {
     display: grid;
