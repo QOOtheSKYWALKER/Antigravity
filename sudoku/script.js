@@ -105,10 +105,21 @@ function generatePuzzle(difficulty) {
     const maxAttempts = 1000;
     const startTime = Date.now();
 
+    // 難易度ごとの抜くマス数の範囲
+    // より多く抜くほど高度な戦略が必要になりやすい
+    const removeRanges = {
+        easy: [40, 48],  // Pair/Locked Candidates が必要になる範囲
+        medium: [44, 52],  // Hidden Pair が必要になる範囲
+        hard: [48, 56]   // Fish/Wing 系が必要になる範囲
+    };
+
+    const difficultyStats = {};
+
     while (attempts < maxAttempts) {
         attempts++;
-        if (Date.now() - startTime > 5000) {
-            console.warn(`${difficulty} パズルの生成がタイムアウトしました`);
+        if (Date.now() - startTime > 8000) {
+            console.warn(`${difficulty} パズルの生成がタイムアウト (${attempts}回試行)`);
+            console.log('生成された難易度の分布:', difficultyStats);
             break;
         }
 
@@ -120,9 +131,9 @@ function generatePuzzle(difficulty) {
         solution = completeGrid.map(row => [...row]);
         const puzzleGrid = completeGrid.map(row => [...row]);
 
-        // 3. マスを抜く（難易度に応じて調整）
-        const removeCounts = { easy: 38, medium: 44, hard: 50 };
-        let toRemove = removeCounts[difficulty] || 40;
+        // 3. マスを抜く（範囲内でランダム化）
+        const [minRemove, maxRemove] = removeRanges[difficulty] || [40, 48];
+        let toRemove = minRemove + Math.floor(Math.random() * (maxRemove - minRemove + 1));
 
         const positions = shuffleArray(
             Array.from({ length: 81 }, (_, i) => [Math.floor(i / 9), i % 9])
@@ -145,14 +156,50 @@ function generatePuzzle(difficulty) {
         const solver = new SudokuLogicalSolver(puzzleGrid);
         const result = solver.solve();
 
+        // 統計追跡
+        const d = result.solved ? result.difficulty : 'unsolved';
+        difficultyStats[d] = (difficultyStats[d] || 0) + 1;
+
         // 目標難易度と一致するか確認
         if (result.solved && result.difficulty === difficulty) {
+            console.log(`${difficulty} パズル生成: ${attempts}回目で成功 (${Date.now() - startTime}ms)`);
             return puzzleGrid;
         }
     }
 
     console.warn(`${difficulty} パズルの生成に失敗。フォールバック実行`);
+    console.log('生成された難易度の分布:', difficultyStats);
+
+    // フォールバック: easyのフォールバックでは無限再帰を避ける
+    if (difficulty === 'easy') {
+        // basicでも返す（最低限プレイ可能）
+        return generateFallback();
+    }
     return generatePuzzle('easy');
+}
+
+// フォールバック: 難易度チェックなしで返す
+function generateFallback() {
+    const completeGrid = Array.from({ length: 9 }, () => Array(9).fill(0));
+    solveSudoku(completeGrid);
+    solution = completeGrid.map(row => [...row]);
+    const puzzleGrid = completeGrid.map(row => [...row]);
+
+    const positions = shuffleArray(
+        Array.from({ length: 81 }, (_, i) => [Math.floor(i / 9), i % 9])
+    );
+    let toRemove = 40;
+    for (const [r, c] of positions) {
+        if (toRemove <= 0) break;
+        const backup = puzzleGrid[r][c];
+        puzzleGrid[r][c] = 0;
+        if (countSolutions(puzzleGrid.map(row => [...row]), 2) !== 1) {
+            puzzleGrid[r][c] = backup;
+        } else {
+            toRemove--;
+        }
+    }
+    return puzzleGrid;
 }
 
 // ===== Undo/Redo =====
