@@ -87,8 +87,10 @@ class SudokuLogicalSolver {
             if (this.applyNakedPair()) { changed = true; continue; }
             if (this.applyLockedCandidates()) { changed = true; continue; }
 
-            // 3. Medium (Hidden Pairs)
+            // 3. Medium (Hidden Pairs, Triples)
             if (this.applyHiddenPair()) { changed = true; continue; }
+            if (this.applyNakedTriple()) { changed = true; continue; }
+            if (this.applyHiddenTriple()) { changed = true; continue; }
 
             // 4. Hard (Fish, Wings, Skyscraper)
             if (this.applyXWing()) { changed = true; continue; }
@@ -126,6 +128,8 @@ class SudokuLogicalSolver {
             'Locked Candidates (Pointing)': 'easy',
             'Locked Candidates (Claiming)': 'easy',
             'Hidden Pair': 'medium',
+            'Naked Triple': 'medium',
+            'Hidden Triple': 'medium',
             'X-Wing': 'hard',
             'Y-Wing': 'hard',
             'Swordfish': 'hard',
@@ -298,6 +302,119 @@ class SudokuLogicalSolver {
                                 }
                                 if (changed) {
                                     this.difficultyLog.push({ technique: 'Hidden Pair', r: cell.r, c: cell.c, nums: [n1, n2] });
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        return changed;
+    }
+
+    /**
+     * Naked Triple: あるユニット内で3つのセルの候補の和集合が3数字以下の場合
+     * その3数字を他のセルから除外できる
+     */
+    applyNakedTriple() {
+        let changed = false;
+        const regions = this.getAllRegions();
+
+        for (const region of regions) {
+            // 候補数が2〜3のセルを探す
+            const emptyCells = region.filter(({ r, c }) =>
+                this.grid[r][c] === 0 && this.candidates[r][c].size >= 2 && this.candidates[r][c].size <= 3
+            );
+
+            if (emptyCells.length < 3) continue;
+
+            for (let i = 0; i < emptyCells.length; i++) {
+                for (let j = i + 1; j < emptyCells.length; j++) {
+                    for (let k = j + 1; k < emptyCells.length; k++) {
+                        const union = new Set([
+                            ...this.candidates[emptyCells[i].r][emptyCells[i].c],
+                            ...this.candidates[emptyCells[j].r][emptyCells[j].c],
+                            ...this.candidates[emptyCells[k].r][emptyCells[k].c]
+                        ]);
+
+                        if (union.size !== 3) continue;
+
+                        const tripleNums = [...union];
+                        const tripleCells = [emptyCells[i], emptyCells[j], emptyCells[k]];
+
+                        // この領域内の他の空セルから、トリプルの数字を削除
+                        for (const { r, c } of region) {
+                            if (this.grid[r][c] !== 0) continue;
+                            if (tripleCells.some(tc => tc.r === r && tc.c === c)) continue;
+
+                            for (const num of tripleNums) {
+                                if (this.candidates[r][c].has(num)) {
+                                    this.candidates[r][c].delete(num);
+                                    changed = true;
+                                    this.difficultyLog.push({ technique: 'Naked Triple', r, c, nums: tripleNums });
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        return changed;
+    }
+
+    /**
+     * Hidden Triple: あるユニット内で3つの数字が3つのセルにしか現れない場合
+     * その3セルから他の候補を除外できる
+     */
+    applyHiddenTriple() {
+        let changed = false;
+        const regions = this.getAllRegions();
+
+        for (const region of regions) {
+            const numPositions = {};
+            for (let n = 1; n <= 9; n++) numPositions[n] = [];
+
+            for (const { r, c } of region) {
+                if (this.grid[r][c] === 0) {
+                    for (const n of this.candidates[r][c]) {
+                        numPositions[n].push({ r, c });
+                    }
+                }
+            }
+
+            // 出現回数が2または3の数字を抽出
+            const candidateNums = [];
+            for (let n = 1; n <= 9; n++) {
+                if (numPositions[n].length >= 2 && numPositions[n].length <= 3) {
+                    candidateNums.push(n);
+                }
+            }
+
+            if (candidateNums.length < 3) continue;
+
+            for (let i = 0; i < candidateNums.length; i++) {
+                for (let j = i + 1; j < candidateNums.length; j++) {
+                    for (let k = j + 1; k < candidateNums.length; k++) {
+                        const n1 = candidateNums[i];
+                        const n2 = candidateNums[j];
+                        const n3 = candidateNums[k];
+
+                        // 3数字の出現セルの和集合
+                        const cellSet = new Map();
+                        for (const pos of [...numPositions[n1], ...numPositions[n2], ...numPositions[n3]]) {
+                            cellSet.set(`${pos.r},${pos.c}`, pos);
+                        }
+
+                        if (cellSet.size !== 3) continue;
+
+                        // その3セルからn1, n2, n3以外を除外
+                        const tripleNums = new Set([n1, n2, n3]);
+                        for (const [, cell] of cellSet) {
+                            for (const n of [...this.candidates[cell.r][cell.c]]) {
+                                if (!tripleNums.has(n)) {
+                                    this.candidates[cell.r][cell.c].delete(n);
+                                    changed = true;
+                                    this.difficultyLog.push({ technique: 'Hidden Triple', r: cell.r, c: cell.c, nums: [n1, n2, n3] });
                                 }
                             }
                         }

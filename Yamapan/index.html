@@ -1,0 +1,169 @@
+<!DOCTYPE html>
+<html lang="ja">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ヤマパン シール点数計算</title>
+    <meta name="description" content="ヤマザキ春のパンまつりの点数シールを画像から読み取り、合計点数を自動計算するWebアプリ">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link
+        href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&family=Noto+Sans+JP:wght@400;600;700;800&display=swap"
+        rel="stylesheet">
+    <link rel="stylesheet" href="style.css">
+</head>
+
+<body>
+    <div class="container">
+
+        <!-- ヘッダー -->
+        <header class="header">
+            <span class="header-icon">🍞</span>
+            <h1>ヤマパン シール計算</h1>
+            <p>シールを撮影して点数を自動カウント</p>
+        </header>
+
+        <!-- 画像入力カード -->
+        <section class="card" id="input-card">
+            <div class="card-title">
+                <span class="icon">📷</span>
+                シール画像を読み込む
+            </div>
+            <div class="drop-zone" id="drop-zone">
+                <span class="drop-zone-icon">📸</span>
+                <p class="drop-zone-text">
+                    <strong>タップして画像を選択</strong><br>
+                    またはここにドラッグ＆ドロップ
+                </p>
+                <p class="drop-zone-hint">JPG, PNG対応</p>
+                <input type="file" id="file-input" accept="image/*" multiple>
+            </div>
+
+            <!-- 画像プレビュー -->
+            <div class="preview-area" id="preview-area">
+                <div class="preview-container">
+                    <img id="preview-image" src="" alt="プレビュー">
+                </div>
+                <p class="preview-filename" id="preview-filename"></p>
+            </div>
+
+            <!-- OCR実行ボタン -->
+            <button class="btn btn-primary" id="ocr-button" disabled>
+                🔍 シールを読み取る
+            </button>
+
+            <!-- プログレスバー -->
+            <div class="progress-section" id="progress-section">
+                <div class="progress-bar-wrapper">
+                    <div class="progress-bar" id="progress-bar"></div>
+                </div>
+                <p class="progress-text" id="progress-text">準備中...</p>
+            </div>
+        </section>
+
+        <!-- OCR結果カード -->
+        <section class="card result-section" id="result-section">
+            <div class="card-title">
+                <span class="icon">🔎</span>
+                認識結果
+            </div>
+
+            <div class="ocr-text-box" id="ocr-text-box">-</div>
+
+            <div class="detected-score" id="detected-score">
+                <span class="detected-score-label">検出された点数:</span>
+                <span class="detected-score-value" id="detected-score-value">-</span>
+                <span class="detected-score-unit">点</span>
+            </div>
+
+            <div class="manual-input-section">
+                <p class="card-title" style="margin-bottom: 8px;">
+                    <span class="icon">✏️</span>
+                    点数を修正・追加
+                </p>
+                <div class="manual-input-row">
+                    <select class="score-select" id="score-select">
+                        <option value="0.5">0.5 点</option>
+                        <option value="1" selected>1 点</option>
+                        <option value="1.5">1.5 点</option>
+                        <option value="2">2 点</option>
+                        <option value="2.5">2.5 点</option>
+                        <option value="3">3 点</option>
+                    </select>
+                    <button class="btn btn-secondary" id="add-score-button">追加</button>
+                </div>
+            </div>
+        </section>
+
+        <!-- 手動追加カード（常時表示） -->
+        <section class="card" id="manual-card">
+            <div class="card-title">
+                <span class="icon">✏️</span>
+                手動で点数を追加
+            </div>
+            <div class="manual-input-row">
+                <select class="score-select" id="manual-score-select">
+                    <option value="0.5">0.5 点</option>
+                    <option value="1" selected>1 点</option>
+                    <option value="1.5">1.5 点</option>
+                    <option value="2">2 点</option>
+                    <option value="2.5">2.5 点</option>
+                    <option value="3">3 点</option>
+                </select>
+                <button class="btn btn-secondary" id="manual-add-button">追加</button>
+            </div>
+        </section>
+
+        <!-- シール一覧カード -->
+        <section class="card" id="sticker-list-card">
+            <div class="card-title">
+                <span class="icon">🎫</span>
+                シール一覧
+                <span id="sticker-count"
+                    style="margin-left: auto; font-size: 0.75rem; color: var(--text-muted);">0枚</span>
+            </div>
+            <ul class="sticker-list" id="sticker-list">
+                <li class="empty-list" id="empty-list">
+                    <span class="empty-list-icon">📭</span>
+                    まだシールがありません
+                </li>
+            </ul>
+            <div class="list-actions" id="list-actions" style="display: none;">
+                <button class="btn btn-danger" id="clear-all-button">🗑️ 全て削除</button>
+            </div>
+        </section>
+
+        <!-- 合計カード -->
+        <section class="card total-card" id="total-card">
+            <div class="total-content">
+                <div>
+                    <div class="total-label">合計点数</div>
+                    <div class="total-remaining" id="total-remaining">あと 30 点でお皿と交換！</div>
+                </div>
+                <div>
+                    <span class="total-value" id="total-value">0</span>
+                    <span class="total-unit">点</span>
+                </div>
+            </div>
+            <div class="goal-progress-bar">
+                <div class="goal-progress-fill" id="goal-progress-fill" style="width: 0%"></div>
+            </div>
+            <div class="celebration" id="celebration">
+                <span class="celebration-emoji">🎉🍽️🎉</span>
+                <p class="celebration-text">30点達成！お皿と交換できます！</p>
+                <p class="celebration-sub">おめでとうございます🌸</p>
+            </div>
+        </section>
+
+    </div>
+
+    <!-- 紙吹雪コンテナ -->
+    <div class="confetti-container" id="confetti-container"></div>
+
+    <!-- Tesseract.js v5 CDN -->
+    <script src="https://unpkg.com/tesseract.js@5/dist/tesseract.min.js"></script>
+    <script src="script.js"></script>
+</body>
+
+</html>

@@ -106,21 +106,42 @@ function generatePuzzle(difficulty) {
     const startTime = Date.now();
 
     // 難易度ごとの抜くマス数の範囲
-    // より多く抜くほど高度な戦略が必要になりやすい
     const removeRanges = {
-        easy: [40, 48],  // Pair/Locked Candidates が必要になる範囲
-        medium: [44, 52],  // Hidden Pair が必要になる範囲
-        hard: [48, 56]   // Fish/Wing 系が必要になる範囲
+        easy: [40, 48],
+        medium: [40, 54],
+        hard: [48, 56]
+    };
+
+    // フォールバック優先度（目標に近い難易度を優先保存）
+    const fallbackRank = {
+        easy: { 'basic': 1 },
+        medium: { 'easy': 2, 'basic': 1 },
+        hard: { 'medium': 2, 'easy': 1 }
     };
 
     const difficultyStats = {};
+    let bestFallback = null;   // 最も近い難易度のパズルを保存
+    let bestFallbackRank = 0;
+
+    // 高速タイムアウト: 2秒以内に見つからなければフォールバック
+    const fastTimeout = 2000;
 
     while (attempts < maxAttempts) {
         attempts++;
-        if (Date.now() - startTime > 8000) {
-            console.warn(`${difficulty} パズルの生成がタイムアウト (${attempts}回試行)`);
-            console.log('生成された難易度の分布:', difficultyStats);
-            break;
+        const elapsed = Date.now() - startTime;
+
+        // タイムアウト: まずフォールバックパズルがあればそれを返す
+        if (elapsed > fastTimeout) {
+            if (bestFallback) {
+                console.log(`${difficulty} パズル生成: ${elapsed}ms でフォールバック使用 (${attempts}回試行)`);
+                return bestFallback;
+            }
+            // フォールバックもなければさらに探す（最大8秒）
+            if (elapsed > 8000) {
+                console.warn(`${difficulty} パズルの生成がタイムアウト (${attempts}回試行)`);
+                console.log('生成された難易度の分布:', difficultyStats);
+                break;
+            }
         }
 
         // 1. 完全な解答を作成
@@ -160,22 +181,30 @@ function generatePuzzle(difficulty) {
         const d = result.solved ? result.difficulty : 'unsolved';
         difficultyStats[d] = (difficultyStats[d] || 0) + 1;
 
-        // 目標難易度と一致するか確認
+        // 完全一致
         if (result.solved && result.difficulty === difficulty) {
             console.log(`${difficulty} パズル生成: ${attempts}回目で成功 (${Date.now() - startTime}ms)`);
             return puzzleGrid;
         }
+
+        // フォールバック候補の保存（目標に最も近いものを保持）
+        if (result.solved) {
+            const rank = (fallbackRank[difficulty] || {})[result.difficulty] || 0;
+            if (rank > bestFallbackRank) {
+                bestFallbackRank = rank;
+                bestFallback = puzzleGrid;
+            }
+        }
     }
 
-    console.warn(`${difficulty} パズルの生成に失敗。フォールバック実行`);
-    console.log('生成された難易度の分布:', difficultyStats);
-
-    // フォールバック: easyのフォールバックでは無限再帰を避ける
-    if (difficulty === 'easy') {
-        // basicでも返す（最低限プレイ可能）
-        return generateFallback();
+    // 最終フォールバック
+    if (bestFallback) {
+        console.log(`${difficulty} パズル: フォールバック候補を使用`);
+        return bestFallback;
     }
-    return generatePuzzle('easy');
+
+    console.warn(`${difficulty} パズルの生成に失敗。最終フォールバック実行`);
+    return generateFallback();
 }
 
 // フォールバック: 難易度チェックなしで返す
