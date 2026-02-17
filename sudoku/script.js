@@ -22,7 +22,9 @@ let renderPending = false;  // 描画バッチ処理フラグ
 
 // DOM要素
 const boardEl = document.getElementById('board');
-const modeDisplay = document.getElementById('mode-display');
+const memoToggle = document.getElementById('memo-toggle');
+const labelInput = document.getElementById('label-input');
+const labelMemo = document.getElementById('label-memo');
 const messageEl = document.getElementById('message');
 const btnUndo = document.getElementById('btn-undo');
 const btnRedo = document.getElementById('btn-redo');
@@ -128,7 +130,7 @@ function generatePuzzle(difficulty) {
         // 3. マスを抜く
         // 難易度に応じて抜く数を調整（あくまで目安。論理的難易度が重要）
         // Hardは手がかりが少ない方が難しい傾向にあるが、少なくしすぎると多重解になりやすい。
-        const removeCounts = { easy: 30, medium: 40, hard: 50 };
+        const removeCounts = { easy: 35, medium: 45, hard: 50 };
         let toRemove = removeCounts[difficulty] || 40;
 
         // ランダムに抜く
@@ -166,6 +168,7 @@ function generatePuzzle(difficulty) {
         if (result.solved) {
             if (difficulty === 'hard' && result.difficulty === 'hard') return puzzleGrid;
             if (difficulty === 'medium' && result.difficulty === 'medium') return puzzleGrid;
+            // EASYはHidden Singleが必要だがPair以上は不要
             if (difficulty === 'easy' && result.difficulty === 'easy') return puzzleGrid;
         }
 
@@ -532,8 +535,9 @@ function clearRelatedMemos(row, col, num) {
 
 function toggleMemoMode() {
     memoMode = !memoMode;
-    modeDisplay.textContent = memoMode ? 'メモモード' : '入力モード';
-    modeDisplay.className = memoMode ? 'mode-display memo-on' : 'mode-display';
+    memoToggle.checked = memoMode;
+    labelInput.classList.toggle('active', !memoMode);
+    labelMemo.classList.toggle('active', memoMode);
 }
 
 
@@ -612,8 +616,8 @@ function handleRocket() {
 
         // Solverで1ステップだけ進める（Basicのみ）
         let stepChanged = false;
+        // Naked Singleのみ適用（候補が1つしか残っていないセルを埋める）
         if (solver.applyNakedSingle()) stepChanged = true;
-        else if (solver.applyHiddenSingle()) stepChanged = true;
 
         if (stepChanged) {
             changesMade = true;
@@ -699,6 +703,21 @@ btnRocket.addEventListener('click', () => {
     handleRocket();
     // ボタンのフォーカスを外す（キーボード操作の邪魔にならないように）
     btnRocket.blur();
+});
+
+// ===== メモトグルスイッチ =====
+memoToggle.addEventListener('change', () => {
+    memoMode = memoToggle.checked;
+    labelInput.classList.toggle('active', !memoMode);
+    labelMemo.classList.toggle('active', memoMode);
+});
+
+labelInput.addEventListener('click', () => {
+    if (memoMode) toggleMemoMode();
+});
+
+labelMemo.addEventListener('click', () => {
+    if (!memoMode) toggleMemoMode();
 });
 
 // ===== Keypad Input =====

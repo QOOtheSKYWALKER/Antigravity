@@ -26,15 +26,21 @@
             <div class="info-panel">
                 <button id="btn-new" class="new-game-btn">新しい問題</button>
                 <button id="btn-reset" class="reset-btn">最初に戻す</button>
+                <button id="btn-rocket" class="rocket-btn">🚀</button>
                 <div class="undo-redo-buttons">
-                    <button id="btn-undo" class="undo-redo-btn" disabled>↩ 戻す</button>
-                    <button id="btn-redo" class="undo-redo-btn" disabled>↪ やり直す</button>
-                    <button id="btn-rocket" class="rocket-btn" title="オートフィル">🚀</button>
+                    <button id="btn-undo" class="undo-redo-btn" title="元に戻す (Ctrl+Z)" disabled>↩</button>
+                    <button id="btn-redo" class="undo-redo-btn" title="やり直す (Ctrl+Y)" disabled>↪</button>
                 </div>
             </div>
             <div class="info-panel">
-                <h2>MODE</h2>
-                <div id="mode-display" class="mode-display">入力モード</div>
+                <div class="mode-toggle-wrapper">
+                    <span class="mode-label mode-label-input active" id="label-input">入力</span>
+                    <label class="toggle-switch">
+                        <input type="checkbox" id="memo-toggle">
+                        <span class="toggle-slider"></span>
+                    </label>
+                    <span class="mode-label mode-label-memo" id="label-memo">メモ</span>
+                </div>
             </div>
             <div id="message" class="message"></div>
             <div class="controls-guide">

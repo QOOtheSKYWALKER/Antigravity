@@ -111,23 +111,24 @@ class SudokuLogicalSolver {
     }
 
     calculateDifficulty() {
-        // ログに基づいて難易度を判定
+        // テクニックごとの難易度マッピング
         const levels = {
-            'Naked Single': 'easy',
+            'Naked Single': 'trivial',
             'Hidden Single': 'easy',
             'Naked Pair': 'medium',
             'Hidden Pair': 'medium',
             'Locked Candidates': 'medium',
+            'Locked Candidates (Pointing)': 'medium',
+            'Locked Candidates (Claiming)': 'medium',
             'X-Wing': 'hard',
             'Y-Wing': 'hard',
             'Swordfish': 'hard'
-            // Jellyfish等は含めていないが、必要なら追加
         };
 
-        let maxDifficulty = 'easy'; // デフォルト
+        let maxDifficulty = 'trivial'; // Naked Singleのみの場合
 
         // 優先度定義 (数値が高いほど難しい)
-        const rank = { 'easy': 1, 'medium': 2, 'hard': 3 };
+        const rank = { 'trivial': 0, 'easy': 1, 'medium': 2, 'hard': 3 };
 
         for (const log of this.difficultyLog) {
             const diff = levels[log.technique];
@@ -136,9 +137,6 @@ class SudokuLogicalSolver {
             }
         }
 
-        // Hardの特別条件: Fish系などを少なくとも1回使用
-        // ここは呼び出し側で判定するか、またはここで詳細なスコアを返すか。
-        // いったん文字列で返す。
         return maxDifficulty;
     }
 

@@ -25,8 +25,8 @@ body {
     display: flex;
     justify-content: center;
     align-items: center;
-    height: 100vh;
-    overflow: hidden;
+    min-height: 100vh;
+    overflow: auto;
 }
 
 .container {
@@ -235,47 +235,124 @@ h1 {
     border-color: #ff6b6b;
 }
 
+/* ロケットボタン（独立行・幅広） */
+.rocket-btn {
+    width: 100%;
+    padding: 10px 0;
+    margin-top: 8px;
+    background-color: #1a3320;
+    color: #66ffaa;
+    border: 1px solid #2a5a3a;
+    border-radius: 8px;
+    font-size: 1.3rem;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    font-family: var(--font-family);
+}
+
+.rocket-btn:hover {
+    background-color: #2a5a3a;
+}
+
+.rocket-btn:active {
+    background-color: #3a7a5a;
+}
+
+/* Undo/Redo ボタン（次の行・アイコンのみ） */
 .undo-redo-buttons {
     display: flex;
-    gap: 10px;
-    margin-top: 10px;
+    gap: 8px;
+    margin-top: 8px;
 }
 
-.undo-redo-btn,
-.rocket-btn {
+.undo-redo-btn {
     flex: 1;
     padding: 8px;
-    background-color: #f0f0f0;
-    border: 1px solid #ddd;
-    border-radius: 4px;
+    background-color: #333;
+    color: #aaa;
+    border: 1px solid #444;
+    border-radius: 6px;
+    font-size: 1.1rem;
     cursor: pointer;
-    font-size: 14px;
     transition: all 0.2s ease;
-    /* Added transition for smooth hover */
     font-family: var(--font-family);
-    /* Kept font-family */
-    color: var(--text-color);
-    /* Kept text color */
 }
 
-.undo-redo-btn:disabled,
-.rocket-btn:disabled {
-    opacity: 0.5;
+.undo-redo-btn:hover:not(:disabled) {
+    background-color: #444;
+    color: #ddd;
+}
+
+.undo-redo-btn:disabled {
+    opacity: 0.3;
     cursor: not-allowed;
 }
 
-/* Mode Display */
-.mode-display {
-    text-align: center;
-    font-weight: bold;
-    padding: 8px;
-    background-color: white;
-    border-radius: 4px;
-    border: 2px solid transparent;
+/* メモモード：トグルスイッチ */
+.mode-toggle-wrapper {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
 }
 
-.mode-display.memo-on {
-    color: #f0a000;
+.mode-label {
+    font-size: 0.85rem;
+    font-weight: bold;
+    color: #666;
+    transition: color 0.2s ease;
+    cursor: pointer;
+    user-select: none;
+}
+
+.mode-label.active {
+    color: var(--accent-color);
+}
+
+.toggle-switch {
+    position: relative;
+    display: inline-block;
+    width: 44px;
+    height: 24px;
+}
+
+.toggle-switch input {
+    opacity: 0;
+    width: 0;
+    height: 0;
+}
+
+.toggle-slider {
+    position: absolute;
+    cursor: pointer;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background-color: #444;
+    border-radius: 24px;
+    transition: background-color 0.3s ease;
+}
+
+.toggle-slider::before {
+    content: '';
+    position: absolute;
+    height: 18px;
+    width: 18px;
+    left: 3px;
+    bottom: 3px;
+    background-color: #ccc;
+    border-radius: 50%;
+    transition: transform 0.3s ease, background-color 0.3s ease;
+}
+
+.toggle-switch input:checked+.toggle-slider {
+    background-color: #1e3d5e;
+}
+
+.toggle-switch input:checked+.toggle-slider::before {
+    transform: translateX(20px);
+    background-color: var(--accent-color);
 }
 
 .message {
@@ -300,4 +377,56 @@ h1 {
     margin: 4px 0;
     white-space: pre;
     /* スペースキー表記などで空白維持したい場合 */
+}
+
+/* ===== キーパッド ===== */
+.keypad {
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+    margin-top: 10px;
+}
+
+.keypad-row {
+    display: flex;
+    gap: 5px;
+}
+
+.key-btn {
+    flex: 1;
+    padding: 8px 0;
+    font-size: 1rem;
+    background-color: #333;
+    color: #ccc;
+    border: 1px solid #444;
+    border-radius: 6px;
+    cursor: pointer;
+    user-select: none;
+    touch-action: manipulation;
+    font-family: var(--font-family);
+    transition: all 0.2s ease;
+}
+
+.key-btn:hover {
+    background-color: #444;
+    color: #fff;
+}
+
+.key-btn:active {
+    background-color: #555;
+}
+
+.key-btn.action-btn {
+    font-size: 0.85rem;
+    font-weight: bold;
+}
+
+.key-btn.bg-red {
+    background-color: rgba(255, 60, 60, 0.15);
+    color: #ff6b6b;
+    border-color: rgba(255, 60, 60, 0.3);
+}
+
+.key-btn.bg-red:hover {
+    background-color: rgba(255, 60, 60, 0.25);
 }
