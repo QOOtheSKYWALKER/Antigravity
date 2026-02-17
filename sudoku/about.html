@@ -1,0 +1,488 @@
+<!DOCTYPE html>
+<html lang="ja">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Antigravity Sudoku — Overview</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg: #0a0a0f;
+            --surface: #141420;
+            --surface-2: #1c1c2e;
+            --accent: #64b5f6;
+            --accent-dim: rgba(100, 181, 246, 0.15);
+            --green: #66ffaa;
+            --green-dim: rgba(102, 255, 170, 0.12);
+            --text: #e0e0e0;
+            --text-dim: #888;
+            --border: #2a2a3e;
+            --font: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            background-color: var(--bg);
+            color: var(--text);
+            font-family: var(--font);
+            line-height: 1.7;
+            overflow-x: hidden;
+        }
+
+        /* ===== ヒーローセクション ===== */
+        .hero {
+            position: relative;
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            text-align: center;
+            padding: 60px 24px;
+            overflow: hidden;
+        }
+
+        .hero::before {
+            content: '';
+            position: absolute;
+            inset: 0;
+            background:
+                radial-gradient(ellipse 600px 400px at 30% 20%, rgba(100, 181, 246, 0.08), transparent),
+                radial-gradient(ellipse 500px 500px at 70% 80%, rgba(102, 255, 170, 0.05), transparent);
+            pointer-events: none;
+        }
+
+        .hero-badge {
+            display: inline-block;
+            background: var(--accent-dim);
+            color: var(--accent);
+            padding: 6px 16px;
+            border-radius: 20px;
+            font-size: 0.8rem;
+            font-weight: 600;
+            letter-spacing: 1px;
+            text-transform: uppercase;
+            margin-bottom: 20px;
+        }
+
+        h1 {
+            font-size: clamp(2.5rem, 6vw, 4rem);
+            font-weight: 800;
+            letter-spacing: 6px;
+            color: var(--accent);
+            margin-bottom: 16px;
+            text-transform: uppercase;
+        }
+
+        .hero-sub {
+            font-size: clamp(1rem, 2vw, 1.2rem);
+            color: var(--text-dim);
+            max-width: 560px;
+            margin-bottom: 40px;
+        }
+
+        .hero-screenshot {
+            width: min(90vw, 760px);
+            border-radius: 16px;
+            border: 1px solid var(--border);
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.6), 0 0 80px rgba(100, 181, 246, 0.06);
+            margin-bottom: 40px;
+        }
+
+        .play-btn {
+            display: inline-flex;
+            align-items: center;
+            gap: 10px;
+            background: linear-gradient(135deg, var(--accent), #4299d6);
+            color: #0a0a0f;
+            font-family: var(--font);
+            font-size: 1.05rem;
+            font-weight: 700;
+            padding: 14px 36px;
+            border: none;
+            border-radius: 12px;
+            text-decoration: none;
+            cursor: pointer;
+            transition: transform 0.2s, box-shadow 0.2s;
+            box-shadow: 0 4px 20px rgba(100, 181, 246, 0.3);
+        }
+
+        .play-btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 8px 30px rgba(100, 181, 246, 0.4);
+        }
+
+        /* ===== セクション共通 ===== */
+        section {
+            max-width: 900px;
+            margin: 0 auto;
+            padding: 80px 24px;
+        }
+
+        h2 {
+            font-size: 1.6rem;
+            font-weight: 700;
+            color: var(--accent);
+            margin-bottom: 12px;
+            letter-spacing: 2px;
+        }
+
+        h2 .emoji {
+            margin-right: 8px;
+        }
+
+        .section-lead {
+            color: var(--text-dim);
+            font-size: 0.95rem;
+            margin-bottom: 32px;
+        }
+
+        /* ===== 特徴カード ===== */
+        .features {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+            gap: 20px;
+            margin-top: 24px;
+        }
+
+        .feature-card {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: 14px;
+            padding: 28px 24px;
+            transition: transform 0.2s, border-color 0.2s;
+        }
+
+        .feature-card:hover {
+            transform: translateY(-4px);
+            border-color: rgba(100, 181, 246, 0.3);
+        }
+
+        .feature-icon {
+            font-size: 1.8rem;
+            margin-bottom: 12px;
+            display: block;
+        }
+
+        .feature-card h3 {
+            font-size: 1rem;
+            font-weight: 600;
+            margin-bottom: 8px;
+            color: var(--text);
+        }
+
+        .feature-card p {
+            font-size: 0.85rem;
+            color: var(--text-dim);
+            line-height: 1.6;
+        }
+
+        /* ===== 難易度テーブル ===== */
+        .difficulty-section {
+            border-top: 1px solid var(--border);
+        }
+
+        table {
+            width: 100%;
+            border-collapse: separate;
+            border-spacing: 0;
+            margin-top: 8px;
+            border-radius: 12px;
+            overflow: hidden;
+            border: 1px solid var(--border);
+        }
+
+        th,
+        td {
+            padding: 14px 18px;
+            text-align: left;
+            font-size: 0.85rem;
+        }
+
+        th {
+            background: var(--surface-2);
+            color: var(--accent);
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            font-size: 0.75rem;
+        }
+
+        td {
+            background: var(--surface);
+            border-top: 1px solid var(--border);
+            color: var(--text-dim);
+        }
+
+        td:first-child {
+            font-weight: 600;
+            color: var(--text);
+        }
+
+        .tag {
+            display: inline-block;
+            padding: 2px 10px;
+            border-radius: 10px;
+            font-size: 0.75rem;
+            font-weight: 600;
+        }
+
+        .tag-easy {
+            background: rgba(102, 187, 106, 0.15);
+            color: #66bb6a;
+        }
+
+        .tag-medium {
+            background: rgba(255, 183, 77, 0.15);
+            color: #ffb74d;
+        }
+
+        .tag-hard {
+            background: rgba(239, 83, 80, 0.15);
+            color: #ef5350;
+        }
+
+        /* ===== テクノロジー ===== */
+        .tech-section {
+            border-top: 1px solid var(--border);
+        }
+
+        .tech-grid {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+            margin-top: 20px;
+        }
+
+        .tech-badge {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            padding: 8px 16px;
+            font-size: 0.8rem;
+            color: var(--text-dim);
+            font-weight: 500;
+        }
+
+        /* ===== 操作方法 ===== */
+        .controls-section {
+            border-top: 1px solid var(--border);
+        }
+
+        .controls-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 12px;
+            margin-top: 20px;
+        }
+
+        .control-item {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: 10px;
+            padding: 12px 16px;
+        }
+
+        .control-key {
+            background: var(--surface-2);
+            border: 1px solid var(--border);
+            border-radius: 6px;
+            padding: 4px 10px;
+            font-size: 0.8rem;
+            font-weight: 600;
+            color: var(--accent);
+            white-space: nowrap;
+            min-width: 48px;
+            text-align: center;
+        }
+
+        .control-desc {
+            font-size: 0.8rem;
+            color: var(--text-dim);
+        }
+
+        /* ===== フッター ===== */
+        footer {
+            text-align: center;
+            padding: 40px 24px;
+            border-top: 1px solid var(--border);
+            color: var(--text-dim);
+            font-size: 0.8rem;
+        }
+
+        footer a {
+            color: var(--accent);
+            text-decoration: none;
+        }
+
+        footer a:hover {
+            text-decoration: underline;
+        }
+
+        /* ===== レスポンシブ ===== */
+        @media (max-width: 600px) {
+            .controls-grid {
+                grid-template-columns: 1fr;
+            }
+        }
+    </style>
+</head>
+
+<body>
+
+    <!-- ヒーロー -->
+    <div class="hero">
+        <span class="hero-badge">Antigravity Project</span>
+        <h1>Sudoku</h1>
+        <p class="hero-sub">
+            論理的ソルバーによる厳密な難易度制御と、
+            洗練されたダークUIを備えたブラウザベースの数独パズル。
+        </p>
+        <img class="hero-screenshot" src="screenshot.png" alt="Antigravity Sudoku のスクリーンショット">
+        <a href="index.html" class="play-btn">
+            ▶ プレイする
+        </a>
+    </div>
+
+    <!-- 特徴 -->
+    <section>
+        <h2><span class="emoji">✨</span>特徴</h2>
+        <p class="section-lead">論理的な解法に基づく本格的な数独体験を提供します。</p>
+        <div class="features">
+            <div class="feature-card">
+                <span class="feature-icon">🧠</span>
+                <h3>論理的ソルバー</h3>
+                <p>10種類以上の戦略（Naked Single〜W-Wing）を実装したソルバーが、パズルの難易度を厳密に判定します。</p>
+            </div>
+            <div class="feature-card">
+                <span class="feature-icon">🎯</span>
+                <h3>3段階の難易度</h3>
+                <p>Easy・Medium・Hardの各レベルは、解法に必要な戦略によって定義されます。推測（バックトラッキング）は不要です。</p>
+            </div>
+            <div class="feature-card">
+                <span class="feature-icon">🚀</span>
+                <h3>ロケットボタン</h3>
+                <p>1回押すとNaked Single / Hidden Singleで確定できるセルを自動入力。2回目で全候補メモを自動記入。</p>
+            </div>
+            <div class="feature-card">
+                <span class="feature-icon">📝</span>
+                <h3>メモモード</h3>
+                <p>トグルスイッチで入力モードとメモモードをワンタッチ切替。候補の管理が直感的に行えます。</p>
+            </div>
+            <div class="feature-card">
+                <span class="feature-icon">↩️</span>
+                <h3>Undo / Redo</h3>
+                <p>最大127ステップの履歴管理。ロケットボタンの操作も1ステップとしてまとめて戻せます。</p>
+            </div>
+            <div class="feature-card">
+                <span class="feature-icon">🌙</span>
+                <h3>ダークモードUI</h3>
+                <p>目に優しいダークテーマ。同一数字ハイライト、エラー検出など、ゲーム体験を支える視覚フィードバック。</p>
+            </div>
+        </div>
+    </section>
+
+    <!-- 難易度 -->
+    <section class="difficulty-section">
+        <h2><span class="emoji">📊</span>難易度レベル</h2>
+        <p class="section-lead">各難易度は、パズルの解法に必要な最高度の戦略によって定義されます。</p>
+        <table>
+            <thead>
+                <tr>
+                    <th>レベル</th>
+                    <th>必要な戦略</th>
+                    <th>説明</th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr>
+                    <td><span class="tag tag-easy">Easy</span></td>
+                    <td>Naked Pair, Locked Candidates</td>
+                    <td>行・列・ブロックの交差分析によるペア除外。基本的パターン認識が鍵。</td>
+                </tr>
+                <tr>
+                    <td><span class="tag tag-medium">Medium</span></td>
+                    <td>Hidden Pair</td>
+                    <td>候補の中に隠れたペアを発見する洞察力が試される。</td>
+                </tr>
+                <tr>
+                    <td><span class="tag tag-hard">Hard</span></td>
+                    <td>X-Wing, Swordfish, Y-Wing, W-Wing, Skyscraper</td>
+                    <td>行列をまたぐフィッシュ系パターンや、強弱リンクを使った高度な推論が必要。</td>
+                </tr>
+            </tbody>
+        </table>
+    </section>
+
+    <!-- 操作方法 -->
+    <section class="controls-section">
+        <h2><span class="emoji">🎮</span>操作方法</h2>
+        <p class="section-lead">キーボードとオンスクリーンキーパッドの両方に対応しています。</p>
+        <div class="controls-grid">
+            <div class="control-item">
+                <span class="control-key">← → ↑ ↓</span>
+                <span class="control-desc">セル間を移動</span>
+            </div>
+            <div class="control-item">
+                <span class="control-key">1 〜 9</span>
+                <span class="control-desc">数字を入力</span>
+            </div>
+            <div class="control-item">
+                <span class="control-key">Del / BS</span>
+                <span class="control-desc">セルを消去</span>
+            </div>
+            <div class="control-item">
+                <span class="control-key">Space</span>
+                <span class="control-desc">メモモード切替</span>
+            </div>
+            <div class="control-item">
+                <span class="control-key">Ctrl+Z</span>
+                <span class="control-desc">元に戻す（Undo）</span>
+            </div>
+            <div class="control-item">
+                <span class="control-key">Ctrl+Y</span>
+                <span class="control-desc">やり直す（Redo）</span>
+            </div>
+        </div>
+    </section>
+
+    <!-- テクノロジー -->
+    <section class="tech-section">
+        <h2><span class="emoji">⚙️</span>テクノロジー</h2>
+        <p class="section-lead">フレームワーク不使用。HTML + CSS + JavaScript のみで構築しています。</p>
+        <div class="tech-grid">
+            <span class="tech-badge">HTML5</span>
+            <span class="tech-badge">CSS3 (Vanilla)</span>
+            <span class="tech-badge">JavaScript (ES6+)</span>
+            <span class="tech-badge">CSS Grid / Flexbox</span>
+            <span class="tech-badge">GitHub Pages</span>
+            <span class="tech-badge">論理的ソルバー (10+ 戦略)</span>
+            <span class="tech-badge">バックトラッキング (唯一解検証)</span>
+        </div>
+    </section>
+
+    <!-- フッター -->
+    <footer>
+        <p>
+            Antigravity Sudoku — Built with ❤️
+            &nbsp;|&nbsp;
+            <a href="https://github.com/QOOtheSKYWALKER/Antigravity" target="_blank" rel="noopener">GitHub</a>
+            &nbsp;|&nbsp;
+            <a href="index.html">プレイする →</a>
+        </p>
+    </footer>
+
+</body>
+
+</html>
