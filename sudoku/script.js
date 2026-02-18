@@ -21,7 +21,7 @@ const translations = {
         guideUndo: 'Ctrl/⌘+Z : 元に戻す',
         guideRedo: 'Ctrl/⌘+Y : やり直す',
         modeInput: '入力モード',
-        modeMemo: 'メモモード',
+        modeMemo: 'メモモード📝',
     },
     en: {
         reset: 'Reset',
@@ -43,7 +43,7 @@ const translations = {
         guideUndo: 'Ctrl/⌘+Z : Undo',
         guideRedo: 'Ctrl/⌘+Y : Redo',
         modeInput: 'Input Mode',
-        modeMemo: 'Memo Mode',
+        modeMemo: 'Memo Mode 📝',
     }
 };
 
@@ -244,7 +244,7 @@ function generatePuzzle(difficulty) {
     // フォールバック優先度（目標に近い難易度を優先保存）
     const fallbackRank = {
         easy: { 'basic': 1 },
-        medium: { 'easy': 2, 'basic': 1 },
+        medium: { 'basic': 1 },
         hard: { 'medium': 2, 'easy': 1 }
     };
 
@@ -637,6 +637,26 @@ function renderBoard() {
             }
         }
     }
+    updateKeypadStatus();
+}
+
+function updateKeypadStatus() {
+    const counts = Array(10).fill(0);
+    for (let r = 0; r < 9; r++) {
+        for (let c = 0; c < 9; c++) {
+            const val = board[r][c];
+            if (val >= 1 && val <= 9) {
+                counts[val]++;
+            }
+        }
+    }
+
+    document.querySelectorAll('.key-btn').forEach(btn => {
+        const num = parseInt(btn.dataset.num);
+        if (num) {
+            btn.classList.toggle('completed', counts[num] >= 9);
+        }
+    });
 }
 
 // ===== ルールチェック =====
