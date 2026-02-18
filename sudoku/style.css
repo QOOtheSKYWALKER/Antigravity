@@ -493,8 +493,9 @@ h1 {
         font-weight: 500;
     }
 
+    /* ハイライト時: サイズは通常と同じ、装飾のみ維持 */
     .cell.same-number {
-        font-size: calc(var(--cell-size) * 0.7);
+        font-size: calc(var(--cell-size) * 0.55);
         font-weight: 700;
     }
 
@@ -502,50 +503,51 @@ h1 {
         font-size: calc(var(--cell-size) * 0.25);
     }
 
-    /* サイドバー: Flexbox (左=コントロール, 右=キーパッド) */
+    /* サイドバー: Grid (左=コントロール+メモ, 右=キーパッド, 下=メッセージ) */
     .sidebar {
-        display: flex;
-        flex-direction: row;
-        flex-wrap: wrap;
+        display: grid;
+        grid-template-columns: auto 1fr;
+        grid-template-rows: auto auto auto;
         width: 100%;
         min-width: 0;
         gap: 8px;
     }
 
-    /* 左下: コントロール群 */
+    /* 左上: 操作ボタン */
     .sidebar>.info-panel:first-child {
-        flex: 1 1 0;
-        min-width: 100px;
+        grid-column: 1;
+        grid-row: 1;
         padding: 8px;
-        order: 1;
     }
 
+    /* 左下: メモトグル */
     .sidebar>.info-panel:nth-child(2) {
-        flex: 1 1 100%;
+        grid-column: 1;
+        grid-row: 2;
         padding: 8px;
-        order: 3;
     }
 
-    .message {
-        flex: 1 1 100%;
-        font-size: 0.8rem;
-        min-height: 20px;
-        order: 4;
-    }
-
-    /* 右下: キーパッド */
+    /* 右: キーパッド (2行分) */
     .keypad {
-        flex: 1 1 0;
-        min-width: 140px;
+        grid-column: 2;
+        grid-row: 1 / 3;
         display: flex;
         flex-direction: column;
         gap: 4px;
-        order: 2;
+        justify-content: center;
     }
 
     .keypad-row .key-btn {
         height: 44px;
         font-size: 1.1rem;
+    }
+
+    /* 最下部: メッセージ (全幅) */
+    .message {
+        grid-column: 1 / 3;
+        grid-row: 3;
+        font-size: 0.8rem;
+        min-height: 20px;
     }
 
     /* モバイルではガイド非表示 */
