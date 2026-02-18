@@ -91,8 +91,6 @@ h1 {
 }
 
 .diff-btn.generating {
-    cursor: not-allowed;
-    pointer-events: none;
     animation: firefly-pulse 1.6s ease-in-out infinite;
 }
 
@@ -431,4 +429,93 @@ h1 {
 
 .key-btn.bg-red:hover {
     background-color: rgba(255, 60, 60, 0.25);
+}
+
+/* ===== モバイル対応 ===== */
+@media screen and (max-width: 700px) {
+    body {
+        align-items: flex-start;
+        min-height: auto;
+        padding: 8px 0;
+    }
+
+    .container {
+        flex-direction: column;
+        gap: 12px;
+        padding: 12px;
+        border-radius: 8px;
+        width: calc(100vw - 16px);
+        box-sizing: border-box;
+    }
+
+    .game-area {
+        width: 100%;
+    }
+
+    .title-bar {
+        margin-bottom: 6px;
+    }
+
+    .title-bar h1 {
+        font-size: 1.2rem;
+    }
+
+    .diff-btn {
+        padding: 5px 10px;
+        font-size: 0.7rem;
+    }
+
+    /* 盤面をビューポート幅に合わせる */
+    .board {
+        --cell-size: max(32px, calc((100vw - 40px) / 9));
+        grid-template-columns: repeat(9, var(--cell-size));
+        grid-template-rows: repeat(9, var(--cell-size));
+        margin: 0 auto;
+    }
+
+    .cell {
+        font-size: clamp(0.9rem, 3vw, 1.3rem);
+    }
+
+    .cell.same-number {
+        font-size: clamp(1rem, 3.5vw, 1.5rem);
+    }
+
+    .memo-num {
+        font-size: clamp(0.4rem, 1.2vw, 0.55rem) !important;
+    }
+
+    /* サイドバーを横幅いっぱいに */
+    .sidebar {
+        flex-direction: row;
+        flex-wrap: wrap;
+        width: 100%;
+        gap: 8px;
+    }
+
+    .info-panel {
+        flex: 1;
+        min-width: 120px;
+        padding: 10px;
+    }
+
+    .message {
+        width: 100%;
+        min-height: 24px;
+        font-size: 0.85rem;
+    }
+
+    .keypad {
+        width: 100%;
+    }
+
+    .key-btn {
+        padding: 10px 0;
+        font-size: 0.95rem;
+    }
+
+    /* PC向けキーボードガイドを隠す */
+    .controls-guide {
+        display: none;
+    }
 }

@@ -10,6 +10,7 @@ let selectedCol = 0;       // 選択中のセル列
 let memoMode = false;      // メモモード
 let currentDifficulty = 'hard';
 let lastInputNumber = 0;   // 直近入力数字（ハイライト用）
+let generationId = 0;      // パズル生成ID（キャンセル検出用）
 
 // Undo/Redo
 const MAX_HISTORY = 127;   // 履歴の上限
@@ -120,7 +121,8 @@ function generatePuzzle(difficulty) {
     };
 
     const difficultyStats = {};
-    let bestFallback = null;   // 最も近い難易度のパズルを保存
+    let bestFallback = null;       // 最も近い難易度のパズルを保存
+    let bestFallbackSolution = null; // フォールバック候補の解答
     let bestFallbackRank = 0;
 
     // 高速タイムアウト: 2秒以内に見つからなければフォールバック
@@ -134,6 +136,7 @@ function generatePuzzle(difficulty) {
         if (elapsed > fastTimeout) {
             if (bestFallback) {
                 console.log(`${difficulty} パズル生成: ${elapsed}ms でフォールバック使用 (${attempts}回試行)`);
+                solution = bestFallbackSolution;
                 return bestFallback;
             }
             // フォールバックもなければさらに探す（最大8秒）
@@ -149,7 +152,7 @@ function generatePuzzle(difficulty) {
         solveSudoku(completeGrid);
 
         // 2. 解答をコピー
-        solution = completeGrid.map(row => [...row]);
+        const currentSolution = completeGrid.map(row => [...row]);
         const puzzleGrid = completeGrid.map(row => [...row]);
 
         // 3. マスを抜く（範囲内でランダム化）
@@ -184,6 +187,7 @@ function generatePuzzle(difficulty) {
         // 完全一致
         if (result.solved && result.difficulty === difficulty) {
             console.log(`${difficulty} パズル生成: ${attempts}回目で成功 (${Date.now() - startTime}ms)`);
+            solution = currentSolution;
             return puzzleGrid;
         }
 
@@ -193,6 +197,7 @@ function generatePuzzle(difficulty) {
             if (rank > bestFallbackRank) {
                 bestFallbackRank = rank;
                 bestFallback = puzzleGrid;
+                bestFallbackSolution = currentSolution;
             }
         }
     }
@@ -200,6 +205,7 @@ function generatePuzzle(difficulty) {
     // 最終フォールバック
     if (bestFallback) {
         console.log(`${difficulty} パズル: フォールバック候補を使用`);
+        solution = bestFallbackSolution;
         return bestFallback;
     }
 
@@ -620,19 +626,31 @@ document.addEventListener('keydown', (e) => {
 
 document.querySelectorAll('.diff-btn').forEach(btn => {
     btn.addEventListener('click', () => {
-        // 生成中は全ボタン無効化
-        const allBtns = document.querySelectorAll('.diff-btn');
-        allBtns.forEach(b => {
-            b.classList.remove('active');
-            b.classList.add('generating');
-        });
-        btn.classList.add('active');
+        const level = btn.dataset.level;
+
+        // 同じ難易度で生成中なら何もしない
+        if (btn.classList.contains('generating')) return;
+
+        // 生成IDをインクリメント（前回の生成結果を無効化）
+        const thisGenId = ++generationId;
 
         // アニメーションを先に描画させてから生成開始
         requestAnimationFrame(() => {
+            // ここでボタン状態を更新（描画フレーム内で反映）
+            const allBtns = document.querySelectorAll('.diff-btn');
+            allBtns.forEach(b => {
+                b.classList.remove('active');
+                b.classList.remove('generating');
+            });
+            btn.classList.add('active');
+            btn.classList.add('generating');
+
             setTimeout(() => {
-                initGame(btn.dataset.level);
-                allBtns.forEach(b => b.classList.remove('generating'));
+                // この生成がキャンセルされていないか確認
+                if (thisGenId !== generationId) return;
+
+                initGame(level);
+                btn.classList.remove('generating');
             }, 50);
         });
     });
@@ -657,6 +675,7 @@ function handleRocket() {
 
     let changesMade = false;
     let conflictFound = false;
+    let memoFilled = false;
 
     // 1. Auto-fill Singles (Loop until no more singles or conflict)
     // ユーザー要望: "確定できるマスが無くなるまで繰り返してください。なお、埋められる数字に矛盾を見つけた場合、そこで処理を終え..."
@@ -734,6 +753,7 @@ function handleRocket() {
                 }
             }
             changesMade = true;
+            memoFilled = true;
             messageEl.textContent = '候補をメモしました 📝';
         }
     }
@@ -743,8 +763,7 @@ function handleRocket() {
     scheduleRender();
     if (checkWin()) {
         messageEl.textContent = '🎉 クリア！';
-    } else if (changesMade && !conflictFound && !lastActionWasRocket) {
-        // 初回のロケット実行で埋まった場合など
+    } else if (changesMade && !conflictFound && !memoFilled) {
         messageEl.textContent = '🚀 確定セルを埋めました';
     }
 
