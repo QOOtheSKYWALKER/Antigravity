@@ -26,36 +26,46 @@ body {
     justify-content: center;
     align-items: center;
     min-height: 100vh;
-    overflow: auto;
+    overflow: hidden;
+    /* コンテンツが画面内に収まることを基本とする */
 }
 
+/* ===== 基本レイアウト (600px以上 / デスクトップ・ランドスケープ) ===== */
+/* 横並び: 左=盤面, 右=サイドバー */
 .container {
     display: flex;
-    gap: 30px;
+    flex-direction: row;
+    /* 横並び */
+    gap: 16px;
     background-color: var(--panel-bg);
-    padding: 30px;
+    padding: 16px;
     border-radius: 16px;
     box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
     border: 1px solid var(--border-color);
+    width: auto;
+    max-height: 100vh;
+    box-sizing: border-box;
 }
 
-/* ===== タイトル & 難易度 ===== */
+/* タイトル & 難易度 */
 .game-area {
     text-align: center;
+    display: flex;
+    flex-direction: column;
 }
 
 .title-bar {
     display: flex;
     align-items: center;
     justify-content: space-between;
-    margin-bottom: 16px;
+    margin-bottom: 8px;
     gap: 16px;
 }
 
 h1 {
-    font-size: 1.5rem;
+    font-size: 1.2rem;
     margin: 0;
-    letter-spacing: 4px;
+    letter-spacing: 2px;
     color: var(--accent-color);
     white-space: nowrap;
 }
@@ -69,9 +79,9 @@ h1 {
     background-color: #333;
     color: #aaa;
     border: 1px solid #444;
-    padding: 6px 14px;
+    padding: 6px 10px;
     border-radius: 6px;
-    font-size: 0.75rem;
+    font-size: 0.7rem;
     cursor: pointer;
     transition: all 0.2s ease;
     font-family: var(--font-family);
@@ -113,11 +123,13 @@ h1 {
     }
 }
 
-/* ===== 盤面 ===== */
+/* 盤面 */
 .board {
     display: grid;
-    grid-template-columns: repeat(9, 48px);
-    grid-template-rows: repeat(9, 48px);
+    /* セルサイズは高さに合わせて自動調整 (最大48px) */
+    --cell-size: min(48px, calc((100vh - 120px) / 9));
+    grid-template-columns: repeat(9, var(--cell-size));
+    grid-template-rows: repeat(9, var(--cell-size));
     gap: 1px;
     background-color: var(--border-color);
     border: 2px solid var(--border-box);
@@ -130,7 +142,8 @@ h1 {
     justify-content: center;
     align-items: center;
     background-color: var(--cell-bg);
-    font-size: 1.3rem;
+    /* フォントサイズもセルサイズに合わせて調整 */
+    font-size: calc(var(--cell-size) * 0.55);
     font-weight: bold;
     color: var(--text-user);
     cursor: pointer;
@@ -155,7 +168,7 @@ h1 {
 .cell.same-number {
     background-color: var(--cell-same-num);
     font-weight: 900;
-    font-size: 1.5rem;
+    font-size: calc(var(--cell-size) * 0.7);
     text-shadow: 0 0 6px rgba(100, 181, 246, 0.4);
 }
 
@@ -172,7 +185,7 @@ h1 {
     border-bottom: 2px solid var(--border-box);
 }
 
-/* ===== メモ表示 ===== */
+/* メモ表示 */
 .cell .memo-grid {
     display: grid;
     grid-template-columns: repeat(3, 1fr);
@@ -188,7 +201,7 @@ h1 {
     display: flex;
     justify-content: center;
     align-items: center;
-    font-size: 0.8rem;
+    font-size: calc(var(--cell-size) * 0.25);
     color: #999;
     font-weight: 500;
 }
@@ -196,56 +209,115 @@ h1 {
 .cell .memo-grid span.memo-highlight {
     font-weight: bold;
     color: var(--accent-color);
-    font-size: 0.85rem;
 }
 
-/* ===== サイドバー ===== */
+/* サイドバー (基本: グリッドレイアウト 2列) */
 .sidebar {
-    display: flex;
-    flex-direction: column;
-    width: 140px;
-    gap: 10px;
+    display: grid;
+    /* 左: コントロール群, 右: キーパッド */
+    grid-template-columns: 1fr auto;
+    grid-template-rows: auto auto auto;
+    gap: 8px;
+    min-width: 220px;
+    align-content: start;
 }
 
 .info-panel {
     background-color: #252525;
-    padding: 15px;
+    padding: 10px;
     border-radius: 8px;
     text-align: center;
 }
 
-/* ===== ボタン ===== */
-.reset-btn {
-    width: 100%;
-    padding: 8px 0;
-    background-color: transparent;
-    color: #888;
-    border: 1px solid #555;
-    border-radius: 8px;
-    font-size: 0.75rem;
-    cursor: pointer;
-    transition: all 0.2s ease;
-    font-family: var(--font-family);
+/* キーパッド (右列) */
+.keypad {
+    grid-column: 2;
+    grid-row: 1 / 4;
+    /* 縦に3行分ぶち抜き */
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
 }
 
-.reset-btn:hover {
+.keypad-row {
+    display: flex;
+    gap: 4px;
+}
+
+.keypad-row-single {
+    justify-content: center;
+}
+
+.keypad-row-single .key-btn {
+    width: 100%;
+}
+
+.key-btn {
+    flex: 1;
+    padding: 0;
+    height: 32px;
+    min-width: 32px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 0.9rem;
+    background-color: #333;
+    color: #ccc;
+    border: 1px solid #444;
+    border-radius: 6px;
+    cursor: pointer;
+    user-select: none;
+    touch-action: manipulation;
+    transition: all 0.2s ease;
+}
+
+.key-btn:hover {
+    background-color: #444;
+    color: #fff;
+}
+
+.key-btn:active {
+    background-color: #555;
+}
+
+.key-btn.action-btn {
+    font-size: 0.8rem;
+    font-weight: bold;
+}
+
+.key-btn.bg-red {
     background-color: rgba(255, 60, 60, 0.15);
     color: #ff6b6b;
-    border-color: #ff6b6b;
+    border-color: rgba(255, 60, 60, 0.3);
+}
+
+.key-btn.bg-red:hover {
+    background-color: rgba(255, 60, 60, 0.25);
+}
+
+/* コントロール群 (左列) */
+/* ロケット & リセット & Undo (上段) */
+.sidebar>.info-panel:first-child {
+    grid-column: 1;
+    grid-row: 1;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+    justify-content: center;
+    align-items: center;
+    padding: 8px;
 }
 
 .rocket-btn {
     width: 100%;
-    padding: 10px 0;
-    margin-top: 8px;
+    padding: 8px 0;
     background-color: #1a3320;
     color: #66ffaa;
     border: 1px solid #2a5a3a;
     border-radius: 8px;
-    font-size: 1.3rem;
+    font-size: 1.2rem;
     cursor: pointer;
     transition: all 0.2s ease;
-    font-family: var(--font-family);
 }
 
 .rocket-btn:hover {
@@ -256,28 +328,38 @@ h1 {
     background-color: #3a7a5a;
 }
 
+.reset-btn {
+    flex: 1;
+    padding: 6px;
+    font-size: 0.7rem;
+    background-color: transparent;
+    color: #888;
+    border: 1px solid #555;
+    border-radius: 6px;
+    cursor: pointer;
+}
+
+.reset-btn:hover {
+    color: #ff6b6b;
+    border-color: #ff6b6b;
+}
+
 .undo-redo-buttons {
     display: flex;
-    gap: 8px;
-    margin-top: 8px;
+    width: 100%;
+    gap: 4px;
+    margin-top: 4px;
 }
 
 .undo-redo-btn {
     flex: 1;
-    padding: 8px;
+    padding: 6px;
     background-color: #333;
     color: #aaa;
     border: 1px solid #444;
     border-radius: 6px;
-    font-size: 1.1rem;
+    font-size: 0.9rem;
     cursor: pointer;
-    transition: all 0.2s ease;
-    font-family: var(--font-family);
-}
-
-.undo-redo-btn:hover:not(:disabled) {
-    background-color: #444;
-    color: #ddd;
 }
 
 .undo-redo-btn:disabled {
@@ -285,21 +367,25 @@ h1 {
     cursor: not-allowed;
 }
 
-/* ===== メモモード：トグルスイッチ ===== */
+/* メモモード (中段) */
+.sidebar>.info-panel:nth-child(2) {
+    grid-column: 1;
+    grid-row: 2;
+    padding: 8px;
+}
+
 .mode-toggle-wrapper {
     display: flex;
     align-items: center;
     justify-content: center;
-    gap: 10px;
+    gap: 8px;
 }
 
 .mode-label {
-    font-size: 0.85rem;
+    font-size: 0.7rem;
     font-weight: bold;
     color: #666;
-    transition: color 0.2s ease;
     cursor: pointer;
-    user-select: none;
 }
 
 .mode-label.active {
@@ -308,9 +394,9 @@ h1 {
 
 .toggle-switch {
     position: relative;
+    width: 36px;
+    height: 20px;
     display: inline-block;
-    width: 44px;
-    height: 24px;
 }
 
 .toggle-switch input {
@@ -327,20 +413,20 @@ h1 {
     right: 0;
     bottom: 0;
     background-color: #444;
-    border-radius: 24px;
-    transition: background-color 0.3s ease;
+    border-radius: 20px;
+    transition: .3s;
 }
 
 .toggle-slider::before {
     content: '';
     position: absolute;
-    height: 18px;
-    width: 18px;
+    height: 14px;
+    width: 14px;
     left: 3px;
     bottom: 3px;
     background-color: #ccc;
     border-radius: 50%;
-    transition: transform 0.3s ease, background-color 0.3s ease;
+    transition: .3s;
 }
 
 .toggle-switch input:checked+.toggle-slider {
@@ -348,335 +434,115 @@ h1 {
 }
 
 .toggle-switch input:checked+.toggle-slider::before {
-    transform: translateX(20px);
+    transform: translateX(16px);
     background-color: var(--accent-color);
 }
 
-/* ===== メッセージ & ガイド ===== */
+/* メッセージ (下段) */
 .message {
-    text-align: center;
-    font-size: 1rem;
-    font-weight: bold;
+    grid-column: 1;
+    grid-row: 3;
+    font-size: 0.8rem;
     color: #66ffaa;
-    min-height: 30px;
+    min-height: 20px;
     display: flex;
     align-items: center;
     justify-content: center;
 }
 
 .controls-guide {
-    font-size: 0.7rem;
-    color: #555;
-    line-height: 1.6;
-    margin-top: auto;
+    display: none;
 }
 
-.controls-guide p {
-    margin: 4px 0;
-    white-space: pre;
-}
 
-/* ===== キーパッド ===== */
-.keypad {
-    display: flex;
-    flex-direction: column;
-    gap: 5px;
-}
-
-.keypad-row {
-    display: flex;
-    gap: 5px;
-}
-
-.keypad-row-single {
-    justify-content: center;
-}
-
-.keypad-row-single .key-btn {
-    flex: none;
-    width: 100%;
-}
-
-.key-btn {
-    flex: 1;
-    padding: 8px 0;
-    font-size: 1rem;
-    background-color: #333;
-    color: #ccc;
-    border: 1px solid #444;
-    border-radius: 6px;
-    cursor: pointer;
-    user-select: none;
-    touch-action: manipulation;
-    font-family: var(--font-family);
-    transition: all 0.2s ease;
-}
-
-.key-btn:hover {
-    background-color: #444;
-    color: #fff;
-}
-
-.key-btn:active {
-    background-color: #555;
-}
-
-.key-btn.action-btn {
-    font-size: 0.85rem;
-    font-weight: bold;
-}
-
-.key-btn.bg-red {
-    background-color: rgba(255, 60, 60, 0.15);
-    color: #ff6b6b;
-    border-color: rgba(255, 60, 60, 0.3);
-}
-
-.key-btn.bg-red:hover {
-    background-color: rgba(255, 60, 60, 0.25);
-}
-
-/* ===== モバイル共通 ===== */
-@media screen and (max-width: 700px),
-screen and (max-height: 600px) and (orientation: landscape) {
+/* ===== モバイルレイアウト (600px未満) ===== */
+@media screen and (max-width: 600px) {
     body {
         align-items: flex-start;
-        min-height: auto;
-        padding: 4px 0;
+        padding: 10px 0;
+        overflow: auto;
+        /* 縦スクロール許可 */
     }
 
     .container {
-        gap: 8px;
-        padding: 8px;
-        border-radius: 8px;
-        width: calc(100vw - 8px);
-        box-sizing: border-box;
-    }
-
-    .game-area {
-        width: auto;
-    }
-
-    .title-bar {
-        margin-bottom: 4px;
+        flex-direction: column;
+        /* 縦積み */
+        width: 100%;
+        max-width: 100%;
+        padding: 10px;
+        gap: 16px;
+        box-shadow: none;
+        border: none;
+        background-color: transparent;
+        height: auto;
+        max-height: none;
     }
 
     .title-bar h1 {
-        font-size: 1.1rem;
+        font-size: 1.4rem;
     }
 
     .diff-btn {
-        padding: 4px 8px;
-        font-size: 0.7rem;
+        padding: 8px 16px;
+        font-size: 0.85rem;
     }
 
-    /* PC向けキーボードガイドを隠す */
-    .controls-guide {
-        display: none;
-    }
-}
-
-/* ===== ポートレート（縦長） ===== */
-@media screen and (max-width: 700px) and (orientation: portrait) {
-    .container {
-        flex-direction: column;
-    }
-
-    .game-area {
-        width: 100%;
-    }
-
-    /* 盤面をビューポート幅に合わせる */
+    /* 盤面: 横幅いっぱい */
     .board {
-        --cell-size: max(32px, calc((100vw - 40px) / 9));
-        grid-template-columns: repeat(9, var(--cell-size));
-        grid-template-rows: repeat(9, var(--cell-size));
+        --cell-size: calc((100vw - 24px) / 9);
+        /* 余白考慮 */
+        width: fit-content;
         margin: 0 auto;
     }
 
     .cell {
-        font-size: clamp(1rem, 4vw, 1.3rem);
+        font-size: calc(var(--cell-size) * 0.55);
     }
 
     .cell.same-number {
-        font-size: clamp(1.1rem, 4.5vw, 1.5rem);
+        font-size: calc(var(--cell-size) * 0.7);
     }
 
-    .memo-num {
-        font-size: clamp(0.45rem, 1.4vw, 0.55rem) !important;
-    }
-
-    /* サイドバーを横幅いっぱいに */
+    /* サイドバー: 横並び・折り返し */
     .sidebar {
-        flex-direction: row;
-        flex-wrap: wrap;
-        width: 100%;
-        gap: 8px;
-    }
-
-    .info-panel {
-        flex: 1;
-        min-width: 120px;
-        padding: 10px;
-    }
-
-    .message {
-        width: 100%;
-        min-height: 24px;
-        font-size: 0.85rem;
-    }
-
-    .keypad {
-        width: 100%;
-    }
-
-    .key-btn {
-        padding: 10px 0;
-        font-size: 0.95rem;
-    }
-}
-
-/* ===== ランドスケープ（横長） ===== */
-@media screen and (max-height: 600px) and (orientation: landscape),
-screen and (max-height: 500px) and (min-aspect-ratio: 1/1) {
-    body {
-        overflow: hidden;
-    }
-
-    .container {
-        flex-direction: row;
-        gap: 6px;
-        padding: 4px 6px;
-        width: calc(100vw - 12px);
-        max-height: 100vh;
-        align-items: flex-start;
-        overflow: hidden;
-    }
-
-    .game-area {
-        flex-shrink: 0;
-    }
-
-    .title-bar {
-        margin-bottom: 2px;
-    }
-
-    .title-bar h1 {
-        font-size: 0.9rem;
-    }
-
-    .diff-btn {
-        padding: 2px 6px;
-        font-size: 0.6rem;
-    }
-
-    /* 盤面を画面の高さに合わせる（タイトルバー+余白分を除く） */
-    .board {
-        --cell-size: calc((100vh - 100px) / 9);
-        grid-template-columns: repeat(9, var(--cell-size));
-        grid-template-rows: repeat(9, var(--cell-size));
-    }
-
-    .cell {
-        font-size: clamp(0.65rem, 2.5vh, 1rem);
-    }
-
-    .cell.same-number {
-        font-size: clamp(0.75rem, 3vh, 1.2rem);
-    }
-
-    .memo-num {
-        font-size: clamp(0.25rem, 0.8vh, 0.4rem) !important;
-    }
-
-    /* サイドバー: 2列レイアウト（左=コントロール, 右=キーパッド） */
-    .sidebar {
-        display: grid;
-        grid-template-columns: 1fr auto;
-        grid-template-rows: auto auto auto;
-        gap: 4px;
-        flex: 1;
-        width: auto;
-        min-width: 0;
-        align-content: start;
-    }
-
-    /* キーパッドを右列に配置 */
-    .keypad {
-        grid-column: 2;
-        grid-row: 1 / 4;
-        width: auto;
-    }
-
-    .keypad-row {
-        gap: 2px;
-    }
-
-    .key-btn {
-        padding: 4px 6px;
-        font-size: 0.75rem;
-        min-width: 24px;
-    }
-
-    /* ロケット等を左上に */
-    .sidebar>.info-panel:first-child {
-        grid-column: 1;
-        grid-row: 1;
-        padding: 3px;
         display: flex;
         flex-direction: row;
         flex-wrap: wrap;
-        gap: 3px;
-        align-items: center;
-        justify-content: center;
+        width: 100%;
+        min-width: 0;
+        gap: 10px;
     }
 
-    .rocket-btn {
-        padding: 3px 6px;
-        font-size: 0.9rem;
+    /* パネル順序制御: コントロール系を先に、キーパッドを後に */
+    .sidebar>.info-panel:first-child {
+        /* Rocket/Reset */
+        width: 100%;
+        /* 横幅いっぱい */
+        order: 1;
     }
 
-    .reset-btn {
-        padding: 2px 4px;
-        font-size: 0.55rem;
-    }
-
-    .undo-redo-btn {
-        padding: 2px 4px;
-        font-size: 0.7rem;
-    }
-
-    /* メモ切り替えを左中段に */
     .sidebar>.info-panel:nth-child(2) {
-        grid-column: 1;
-        grid-row: 2;
-        padding: 3px;
+        /* Memo toggle */
+        flex: 1;
+        order: 2;
     }
 
-    .mode-toggle-wrapper {
-        gap: 3px;
-    }
-
-    .mode-label {
-        font-size: 0.6rem;
-    }
-
-    .toggle-switch {
-        width: 32px;
-        height: 16px;
-    }
-
-    .toggle-slider::before {
-        width: 12px;
-        height: 12px;
-    }
-
-    /* メッセージを左下に */
     .message {
-        grid-column: 1;
-        grid-row: 3;
-        min-height: 16px;
-        font-size: 0.65rem;
-        padding: 2px;
+        flex: 1;
+        order: 3;
+        min-width: 100px;
+    }
+
+    .keypad {
+        width: 100%;
+        display: flex;
+        flex-direction: column;
+        order: 4;
+    }
+
+    .keypad-row .key-btn {
+        height: 48px;
+        /* タップしやすい大きさ */
+        font-size: 1.2rem;
     }
 }
