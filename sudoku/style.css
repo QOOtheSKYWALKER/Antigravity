@@ -91,20 +91,25 @@ h1 {
 }
 
 .diff-btn.generating {
-    animation: firefly-pulse 1.6s ease-in-out infinite;
+    animation: blue-pulse 1.4s ease-in-out infinite;
+    background-color: var(--accent-color);
+    color: #121212;
+    border-color: var(--accent-color);
 }
 
-@keyframes firefly-pulse {
+@keyframes blue-pulse {
 
     0%,
     100% {
-        box-shadow: 0 0 4px rgba(100, 181, 246, 0.2);
-        opacity: 0.6;
+        box-shadow: 0 0 6px rgba(100, 181, 246, 0.3);
+        background-color: var(--accent-color);
+        filter: brightness(0.7);
     }
 
     50% {
-        box-shadow: 0 0 18px rgba(100, 181, 246, 0.7), 0 0 36px rgba(100, 181, 246, 0.3);
-        opacity: 1;
+        box-shadow: 0 0 20px rgba(100, 181, 246, 0.8), 0 0 40px rgba(100, 181, 246, 0.3);
+        background-color: var(--accent-color);
+        filter: brightness(1.2);
     }
 }
 
@@ -433,7 +438,7 @@ h1 {
 
 /* ===== モバイル共通 ===== */
 @media screen and (max-width: 700px),
-screen and (max-height: 500px) {
+screen and (max-height: 600px) and (orientation: landscape) {
     body {
         align-items: flex-start;
         min-height: auto;
@@ -532,7 +537,8 @@ screen and (max-height: 500px) {
 }
 
 /* ===== ランドスケープ（横長） ===== */
-@media screen and (max-height: 500px) and (min-aspect-ratio: 1/1) {
+@media screen and (max-height: 600px) and (orientation: landscape),
+screen and (max-height: 500px) and (min-aspect-ratio: 1/1) {
     body {
         overflow: hidden;
     }
@@ -583,11 +589,11 @@ screen and (max-height: 500px) {
         font-size: clamp(0.25rem, 0.8vh, 0.4rem) !important;
     }
 
-    /* サイドバー: 2列レイアウト（左=キーパッド, 右=コントロール） */
+    /* サイドバー: 2列レイアウト（左=コントロール, 右=キーパッド） */
     .sidebar {
         display: grid;
-        grid-template-columns: auto 1fr;
-        grid-template-rows: 1fr auto auto;
+        grid-template-columns: 1fr auto;
+        grid-template-rows: auto auto auto;
         gap: 4px;
         flex: 1;
         width: auto;
@@ -595,9 +601,9 @@ screen and (max-height: 500px) {
         align-content: start;
     }
 
-    /* キーパッドを左列に配置 */
+    /* キーパッドを右列に配置 */
     .keypad {
-        grid-column: 1;
+        grid-column: 2;
         grid-row: 1 / 4;
         width: auto;
     }
@@ -612,9 +618,9 @@ screen and (max-height: 500px) {
         min-width: 24px;
     }
 
-    /* ロケット等を右上に */
+    /* ロケット等を左上に */
     .sidebar>.info-panel:first-child {
-        grid-column: 2;
+        grid-column: 1;
         grid-row: 1;
         padding: 3px;
         display: flex;
@@ -640,9 +646,9 @@ screen and (max-height: 500px) {
         font-size: 0.7rem;
     }
 
-    /* メモ切り替えを右中段に */
+    /* メモ切り替えを左中段に */
     .sidebar>.info-panel:nth-child(2) {
-        grid-column: 2;
+        grid-column: 1;
         grid-row: 2;
         padding: 3px;
     }
@@ -665,9 +671,9 @@ screen and (max-height: 500px) {
         height: 12px;
     }
 
-    /* メッセージを右下に */
+    /* メッセージを左下に */
     .message {
-        grid-column: 2;
+        grid-column: 1;
         grid-row: 3;
         min-height: 16px;
         font-size: 0.65rem;
