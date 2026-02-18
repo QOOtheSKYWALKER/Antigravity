@@ -502,7 +502,7 @@ h1 {
         font-size: calc(var(--cell-size) * 0.25);
     }
 
-    /* サイドバー: Flexbox折り返し */
+    /* サイドバー: Flexbox (左=コントロール, 右=キーパッド) */
     .sidebar {
         display: flex;
         flex-direction: row;
@@ -512,28 +512,35 @@ h1 {
         gap: 8px;
     }
 
+    /* 左下: コントロール群 */
     .sidebar>.info-panel:first-child {
-        width: 100%;
+        flex: 1 1 0;
+        min-width: 100px;
         padding: 8px;
+        order: 1;
     }
 
     .sidebar>.info-panel:nth-child(2) {
-        flex: 1;
+        flex: 1 1 100%;
         padding: 8px;
+        order: 3;
     }
 
     .message {
-        flex: 1;
+        flex: 1 1 100%;
         font-size: 0.8rem;
         min-height: 20px;
-        min-width: 80px;
+        order: 4;
     }
 
+    /* 右下: キーパッド */
     .keypad {
-        width: 100%;
+        flex: 1 1 0;
+        min-width: 140px;
         display: flex;
         flex-direction: column;
         gap: 4px;
+        order: 2;
     }
 
     .keypad-row .key-btn {
