@@ -431,38 +431,54 @@ h1 {
     background-color: rgba(255, 60, 60, 0.25);
 }
 
-/* ===== モバイル対応 ===== */
-@media screen and (max-width: 700px) {
+/* ===== モバイル共通 ===== */
+@media screen and (max-width: 700px),
+screen and (max-height: 500px) {
     body {
         align-items: flex-start;
         min-height: auto;
-        padding: 8px 0;
+        padding: 4px 0;
     }
 
     .container {
-        flex-direction: column;
-        gap: 12px;
-        padding: 12px;
+        gap: 8px;
+        padding: 8px;
         border-radius: 8px;
-        width: calc(100vw - 16px);
+        width: calc(100vw - 8px);
         box-sizing: border-box;
     }
 
     .game-area {
-        width: 100%;
+        width: auto;
     }
 
     .title-bar {
-        margin-bottom: 6px;
+        margin-bottom: 4px;
     }
 
     .title-bar h1 {
-        font-size: 1.2rem;
+        font-size: 1.1rem;
     }
 
     .diff-btn {
-        padding: 5px 10px;
+        padding: 4px 8px;
         font-size: 0.7rem;
+    }
+
+    /* PC向けキーボードガイドを隠す */
+    .controls-guide {
+        display: none;
+    }
+}
+
+/* ===== ポートレート（縦長） ===== */
+@media screen and (max-width: 700px) and (orientation: portrait) {
+    .container {
+        flex-direction: column;
+    }
+
+    .game-area {
+        width: 100%;
     }
 
     /* 盤面をビューポート幅に合わせる */
@@ -474,15 +490,15 @@ h1 {
     }
 
     .cell {
-        font-size: clamp(0.9rem, 3vw, 1.3rem);
+        font-size: clamp(1rem, 4vw, 1.3rem);
     }
 
     .cell.same-number {
-        font-size: clamp(1rem, 3.5vw, 1.5rem);
+        font-size: clamp(1.1rem, 4.5vw, 1.5rem);
     }
 
     .memo-num {
-        font-size: clamp(0.4rem, 1.2vw, 0.55rem) !important;
+        font-size: clamp(0.45rem, 1.4vw, 0.55rem) !important;
     }
 
     /* サイドバーを横幅いっぱいに */
@@ -513,9 +529,148 @@ h1 {
         padding: 10px 0;
         font-size: 0.95rem;
     }
+}
 
-    /* PC向けキーボードガイドを隠す */
-    .controls-guide {
-        display: none;
+/* ===== ランドスケープ（横長） ===== */
+@media screen and (max-height: 500px) and (min-aspect-ratio: 1/1) {
+    body {
+        overflow: hidden;
+    }
+
+    .container {
+        flex-direction: row;
+        gap: 6px;
+        padding: 4px 6px;
+        width: calc(100vw - 12px);
+        max-height: 100vh;
+        align-items: flex-start;
+        overflow: hidden;
+    }
+
+    .game-area {
+        flex-shrink: 0;
+    }
+
+    .title-bar {
+        margin-bottom: 2px;
+    }
+
+    .title-bar h1 {
+        font-size: 0.9rem;
+    }
+
+    .diff-btn {
+        padding: 2px 6px;
+        font-size: 0.6rem;
+    }
+
+    /* 盤面を画面の高さに合わせる（タイトルバー+余白分を除く） */
+    .board {
+        --cell-size: calc((100vh - 100px) / 9);
+        grid-template-columns: repeat(9, var(--cell-size));
+        grid-template-rows: repeat(9, var(--cell-size));
+    }
+
+    .cell {
+        font-size: clamp(0.65rem, 2.5vh, 1rem);
+    }
+
+    .cell.same-number {
+        font-size: clamp(0.75rem, 3vh, 1.2rem);
+    }
+
+    .memo-num {
+        font-size: clamp(0.25rem, 0.8vh, 0.4rem) !important;
+    }
+
+    /* サイドバー: 2列レイアウト（左=キーパッド, 右=コントロール） */
+    .sidebar {
+        display: grid;
+        grid-template-columns: auto 1fr;
+        grid-template-rows: 1fr auto auto;
+        gap: 4px;
+        flex: 1;
+        width: auto;
+        min-width: 0;
+        align-content: start;
+    }
+
+    /* キーパッドを左列に配置 */
+    .keypad {
+        grid-column: 1;
+        grid-row: 1 / 4;
+        width: auto;
+    }
+
+    .keypad-row {
+        gap: 2px;
+    }
+
+    .key-btn {
+        padding: 4px 6px;
+        font-size: 0.75rem;
+        min-width: 24px;
+    }
+
+    /* ロケット等を右上に */
+    .sidebar>.info-panel:first-child {
+        grid-column: 2;
+        grid-row: 1;
+        padding: 3px;
+        display: flex;
+        flex-direction: row;
+        flex-wrap: wrap;
+        gap: 3px;
+        align-items: center;
+        justify-content: center;
+    }
+
+    .rocket-btn {
+        padding: 3px 6px;
+        font-size: 0.9rem;
+    }
+
+    .reset-btn {
+        padding: 2px 4px;
+        font-size: 0.55rem;
+    }
+
+    .undo-redo-btn {
+        padding: 2px 4px;
+        font-size: 0.7rem;
+    }
+
+    /* メモ切り替えを右中段に */
+    .sidebar>.info-panel:nth-child(2) {
+        grid-column: 2;
+        grid-row: 2;
+        padding: 3px;
+    }
+
+    .mode-toggle-wrapper {
+        gap: 3px;
+    }
+
+    .mode-label {
+        font-size: 0.6rem;
+    }
+
+    .toggle-switch {
+        width: 32px;
+        height: 16px;
+    }
+
+    .toggle-slider::before {
+        width: 12px;
+        height: 12px;
+    }
+
+    /* メッセージを右下に */
+    .message {
+        grid-column: 2;
+        grid-row: 3;
+        min-height: 16px;
+        font-size: 0.65rem;
+        padding: 2px;
     }
 }

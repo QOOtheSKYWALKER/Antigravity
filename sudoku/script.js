@@ -634,24 +634,26 @@ document.querySelectorAll('.diff-btn').forEach(btn => {
         // 生成IDをインクリメント（前回の生成結果を無効化）
         const thisGenId = ++generationId;
 
-        // アニメーションを先に描画させてから生成開始
-        requestAnimationFrame(() => {
-            // ここでボタン状態を更新（描画フレーム内で反映）
-            const allBtns = document.querySelectorAll('.diff-btn');
-            allBtns.forEach(b => {
-                b.classList.remove('active');
-                b.classList.remove('generating');
-            });
-            btn.classList.add('active');
-            btn.classList.add('generating');
+        // ボタン状態を即座に更新
+        const allBtns = document.querySelectorAll('.diff-btn');
+        allBtns.forEach(b => {
+            b.classList.remove('active');
+            b.classList.remove('generating');
+        });
+        btn.classList.add('active');
+        btn.classList.add('generating');
 
-            setTimeout(() => {
+        // 二重RAFで描画完了を保証してから同期的な生成を開始
+        // 1回目のRAF: DOMの変更がレイアウトに反映される
+        // 2回目のRAF: ブラウザが1回目の変更を描画した後に実行される
+        requestAnimationFrame(() => {
+            requestAnimationFrame(() => {
                 // この生成がキャンセルされていないか確認
                 if (thisGenId !== generationId) return;
 
                 initGame(level);
                 btn.classList.remove('generating');
-            }, 50);
+            });
         });
     });
 });
