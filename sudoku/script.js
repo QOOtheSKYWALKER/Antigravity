@@ -20,6 +20,8 @@ const translations = {
         guideMemo: 'Space : メモ切替',
         guideUndo: 'Ctrl/⌘+Z : 元に戻す',
         guideRedo: 'Ctrl/⌘+Y : やり直す',
+        modeInput: '入力モード',
+        modeMemo: 'メモモード',
     },
     en: {
         reset: 'Reset',
@@ -40,6 +42,8 @@ const translations = {
         guideMemo: 'Space : Toggle memo',
         guideUndo: 'Ctrl/⌘+Z : Undo',
         guideRedo: 'Ctrl/⌘+Y : Redo',
+        modeInput: 'Input Mode',
+        modeMemo: 'Memo Mode',
     }
 };
 
@@ -717,6 +721,7 @@ function toggleMemoMode() {
     memoToggle.checked = memoMode;
     labelInput.classList.toggle('active', !memoMode);
     labelMemo.classList.toggle('active', memoMode);
+    messageEl.textContent = memoMode ? t('modeMemo') : t('modeInput');
 }
 
 
@@ -909,6 +914,7 @@ memoToggle.addEventListener('change', () => {
     memoMode = memoToggle.checked;
     labelInput.classList.toggle('active', !memoMode);
     labelMemo.classList.toggle('active', memoMode);
+    messageEl.textContent = memoMode ? t('modeMemo') : t('modeInput');
 });
 
 labelInput.addEventListener('click', () => {
