@@ -1,4 +1,4 @@
-/* ===== デザインシステム ===== */
+/* ===== デザインシステム (ダークテーマ = デフォルト) ===== */
 :root {
     --bg-color: #121212;
     --panel-bg: #1e1e1e;
@@ -15,6 +15,73 @@
     --border-color: #333;
     --border-box: #666;
     --font-family: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+
+    /* ボタン・UI部品用 */
+    --btn-bg: #333;
+    --btn-color: #ccc;
+    --btn-border: #444;
+    --btn-hover-bg: #444;
+    --btn-hover-color: #fff;
+    --info-panel-bg: #252525;
+    --reset-color: #888;
+    --reset-border: #555;
+    --rocket-bg: #1a3320;
+    --rocket-color: #66ffaa;
+    --rocket-border: #2a5a3a;
+    --rocket-hover-bg: #2a5a3a;
+    --toggle-bg: #444;
+    --toggle-knob: #ccc;
+    --toggle-checked-bg: #1e3d5e;
+    --mode-label-color: #666;
+    --message-color: #66ffaa;
+    --guide-color: #555;
+    --shadow-color: rgba(0, 0, 0, 0.5);
+    --settings-bg: transparent;
+    --settings-select-bg: #1e1e1e;
+    --settings-select-color: #aaa;
+    --settings-select-border: #333;
+}
+
+/* ===== ライトテーマ ===== */
+[data-theme="light"] {
+    --bg-color: #f0f2f5;
+    --panel-bg: #ffffff;
+    --cell-bg: #fafafa;
+    --cell-selected: #d0e4f7;
+    --cell-highlight: #e8f0f8;
+    --cell-same-num: #c8ddf0;
+    --cell-error: rgba(211, 47, 47, 0.15);
+    --text-color: #1a1a1a;
+    --text-given: #3a4a6a;
+    --text-user: #1565c0;
+    --text-error: #d32f2f;
+    --accent-color: #1976d2;
+    --border-color: #d0d0d0;
+    --border-box: #999;
+
+    --btn-bg: #e8e8e8;
+    --btn-color: #333;
+    --btn-border: #ccc;
+    --btn-hover-bg: #d0d0d0;
+    --btn-hover-color: #111;
+    --info-panel-bg: #f5f5f5;
+    --reset-color: #666;
+    --reset-border: #bbb;
+    --rocket-bg: #e8f5e9;
+    --rocket-color: #2e7d32;
+    --rocket-border: #a5d6a7;
+    --rocket-hover-bg: #c8e6c9;
+    --toggle-bg: #ccc;
+    --toggle-knob: #fff;
+    --toggle-checked-bg: #90caf9;
+    --mode-label-color: #999;
+    --message-color: #2e7d32;
+    --guide-color: #999;
+    --shadow-color: rgba(0, 0, 0, 0.1);
+    --settings-bg: transparent;
+    --settings-select-bg: #fff;
+    --settings-select-color: #555;
+    --settings-select-border: #ccc;
 }
 
 body {
@@ -23,25 +90,25 @@ body {
     font-family: var(--font-family);
     margin: 0;
     display: flex;
-    justify-content: center;
+    flex-direction: column;
     align-items: center;
+    justify-content: center;
     min-height: 100vh;
     overflow: auto;
-    /* デスクトップはスクロール可 */
+    transition: background-color 0.3s ease, color 0.3s ease;
 }
 
-/* ===== 基本レイアウト (600px以上 / 旧デスクトップ版) ===== */
+/* ===== 基本レイアウト (720px以上 / デスクトップ版) ===== */
 .container {
     display: flex;
     flex-direction: row;
-    /* 横並び */
     gap: 30px;
-    /* 以前の間隔 */
     background-color: var(--panel-bg);
     padding: 30px;
     border-radius: 16px;
-    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
+    box-shadow: 0 10px 30px var(--shadow-color);
     border: 1px solid var(--border-color);
+    transition: background-color 0.3s ease, border-color 0.3s ease;
 }
 
 /* タイトル & 難易度 */
@@ -71,9 +138,9 @@ h1 {
 }
 
 .diff-btn {
-    background-color: #333;
-    color: #aaa;
-    border: 1px solid #444;
+    background-color: var(--btn-bg);
+    color: var(--btn-color);
+    border: 1px solid var(--btn-border);
     padding: 6px 14px;
     border-radius: 6px;
     font-size: 0.75rem;
@@ -84,21 +151,25 @@ h1 {
 }
 
 .diff-btn:hover {
-    background-color: #444;
-    color: #ddd;
+    background-color: var(--btn-hover-bg);
+    color: var(--btn-hover-color);
 }
 
 .diff-btn.active {
     background-color: var(--accent-color);
-    color: #121212;
+    color: #fff;
     border-color: var(--accent-color);
     font-weight: bold;
+}
+
+[data-theme="light"] .diff-btn.active {
+    color: #fff;
 }
 
 .diff-btn.generating {
     animation: blue-pulse 1.4s ease-in-out infinite;
     background-color: var(--accent-color);
-    color: #121212;
+    color: #fff;
     border-color: var(--accent-color);
 }
 
@@ -127,9 +198,8 @@ h1 {
     background-color: var(--border-color);
     border: 2px solid var(--border-box);
     border-radius: 4px;
-    box-shadow: inset 0 0 10px rgba(0, 0, 0, 0.5);
+    box-shadow: inset 0 0 10px var(--shadow-color);
     margin: 0;
-    /* マージンリセット */
 }
 
 .cell {
@@ -196,7 +266,7 @@ h1 {
     justify-content: center;
     align-items: center;
     font-size: 0.8rem;
-    color: #999;
+    color: var(--mode-label-color);
     font-weight: 500;
 }
 
@@ -215,10 +285,11 @@ h1 {
 }
 
 .info-panel {
-    background-color: #252525;
+    background-color: var(--info-panel-bg);
     padding: 15px;
     border-radius: 8px;
     text-align: center;
+    transition: background-color 0.3s ease;
 }
 
 /* ボタン類 */
@@ -226,8 +297,8 @@ h1 {
     width: 100%;
     padding: 8px 0;
     background-color: transparent;
-    color: #888;
-    border: 1px solid #555;
+    color: var(--reset-color);
+    border: 1px solid var(--reset-border);
     border-radius: 8px;
     font-size: 0.75rem;
     cursor: pointer;
@@ -237,17 +308,17 @@ h1 {
 
 .reset-btn:hover {
     background-color: rgba(255, 60, 60, 0.15);
-    color: #ff6b6b;
-    border-color: #ff6b6b;
+    color: var(--text-error);
+    border-color: var(--text-error);
 }
 
 .rocket-btn {
     width: 100%;
     padding: 10px 0;
     margin-top: 8px;
-    background-color: #1a3320;
-    color: #66ffaa;
-    border: 1px solid #2a5a3a;
+    background-color: var(--rocket-bg);
+    color: var(--rocket-color);
+    border: 1px solid var(--rocket-border);
     border-radius: 8px;
     font-size: 1.3rem;
     cursor: pointer;
@@ -256,11 +327,11 @@ h1 {
 }
 
 .rocket-btn:hover {
-    background-color: #2a5a3a;
+    background-color: var(--rocket-hover-bg);
 }
 
 .rocket-btn:active {
-    background-color: #3a7a5a;
+    filter: brightness(1.2);
 }
 
 .undo-redo-buttons {
@@ -272,9 +343,9 @@ h1 {
 .undo-redo-btn {
     flex: 1;
     padding: 8px;
-    background-color: #333;
-    color: #aaa;
-    border: 1px solid #444;
+    background-color: var(--btn-bg);
+    color: var(--btn-color);
+    border: 1px solid var(--btn-border);
     border-radius: 6px;
     font-size: 1.1rem;
     cursor: pointer;
@@ -283,8 +354,8 @@ h1 {
 }
 
 .undo-redo-btn:hover:not(:disabled) {
-    background-color: #444;
-    color: #ddd;
+    background-color: var(--btn-hover-bg);
+    color: var(--btn-hover-color);
 }
 
 .undo-redo-btn:disabled {
@@ -303,7 +374,7 @@ h1 {
 .mode-label {
     font-size: 0.85rem;
     font-weight: bold;
-    color: #666;
+    color: var(--mode-label-color);
     transition: color 0.2s ease;
     cursor: pointer;
     user-select: none;
@@ -333,7 +404,7 @@ h1 {
     left: 0;
     right: 0;
     bottom: 0;
-    background-color: #444;
+    background-color: var(--toggle-bg);
     border-radius: 24px;
     transition: background-color 0.3s ease;
 }
@@ -345,13 +416,13 @@ h1 {
     width: 18px;
     left: 3px;
     bottom: 3px;
-    background-color: #ccc;
+    background-color: var(--toggle-knob);
     border-radius: 50%;
     transition: transform 0.3s ease, background-color 0.3s ease;
 }
 
 .toggle-switch input:checked+.toggle-slider {
-    background-color: #1e3d5e;
+    background-color: var(--toggle-checked-bg);
 }
 
 .toggle-switch input:checked+.toggle-slider::before {
@@ -364,7 +435,7 @@ h1 {
     text-align: center;
     font-size: 1rem;
     font-weight: bold;
-    color: #66ffaa;
+    color: var(--message-color);
     min-height: 30px;
     display: flex;
     align-items: center;
@@ -373,7 +444,7 @@ h1 {
 
 .controls-guide {
     font-size: 0.7rem;
-    color: #555;
+    color: var(--guide-color);
     line-height: 1.6;
     margin-top: auto;
 }
@@ -408,9 +479,9 @@ h1 {
     flex: 1;
     padding: 8px 0;
     font-size: 1rem;
-    background-color: #333;
-    color: #ccc;
-    border: 1px solid #444;
+    background-color: var(--btn-bg);
+    color: var(--btn-color);
+    border: 1px solid var(--btn-border);
     border-radius: 6px;
     cursor: pointer;
     user-select: none;
@@ -420,12 +491,12 @@ h1 {
 }
 
 .key-btn:hover {
-    background-color: #444;
-    color: #fff;
+    background-color: var(--btn-hover-bg);
+    color: var(--btn-hover-color);
 }
 
 .key-btn:active {
-    background-color: #555;
+    filter: brightness(0.85);
 }
 
 .key-btn.action-btn {
@@ -435,12 +506,44 @@ h1 {
 
 .key-btn.bg-red {
     background-color: rgba(255, 60, 60, 0.15);
-    color: #ff6b6b;
+    color: var(--text-error);
     border-color: rgba(255, 60, 60, 0.3);
 }
 
 .key-btn.bg-red:hover {
     background-color: rgba(255, 60, 60, 0.25);
+}
+
+/* ===== 設定バー ===== */
+.settings-bar {
+    display: flex;
+    justify-content: center;
+    gap: 12px;
+    padding: 12px 0 8px;
+}
+
+.settings-bar select {
+    background-color: var(--settings-select-bg);
+    color: var(--settings-select-color);
+    border: 1px solid var(--settings-select-border);
+    border-radius: 6px;
+    padding: 6px 10px;
+    font-size: 0.75rem;
+    font-family: var(--font-family);
+    cursor: pointer;
+    outline: none;
+    transition: all 0.2s ease;
+    -webkit-appearance: none;
+    appearance: none;
+    background-image: url("data:image/svg+xml;charset=UTF-8,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23888' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3e%3cpolyline points='6 9 12 15 18 9'%3e%3c/polyline%3e%3c/svg%3e");
+    background-repeat: no-repeat;
+    background-position: right 6px center;
+    background-size: 14px;
+    padding-right: 24px;
+}
+
+.settings-bar select:hover {
+    border-color: var(--accent-color);
 }
 
 
@@ -450,12 +553,10 @@ h1 {
         align-items: flex-start;
         padding: 6px 0;
         overflow: auto;
-        /* 縦スクロール許可 */
     }
 
     .container {
         flex-direction: column;
-        /* 縦積み */
         width: 100%;
         max-width: 100%;
         padding: 8px;
@@ -479,6 +580,8 @@ h1 {
     /* 盤面: 横幅いっぱい */
     .board {
         --cell-size: calc((100vw - 20px) / 9);
+        grid-template-columns: repeat(9, var(--cell-size));
+        grid-template-rows: repeat(9, var(--cell-size));
         width: fit-content;
         margin: 0 auto;
     }
@@ -493,7 +596,6 @@ h1 {
         font-weight: 500;
     }
 
-    /* ハイライト時: サイズは通常と同じ、装飾のみ維持 */
     .cell.same-number {
         font-size: calc(var(--cell-size) * 0.55);
         font-weight: 700;
@@ -503,7 +605,7 @@ h1 {
         font-size: calc(var(--cell-size) * 0.25);
     }
 
-    /* サイドバー: Grid (左=コントロール+メモ, 右=キーパッド, 下=メッセージ) */
+    /* サイドバー: Grid (左上=メモ, 左下=操作, 右=キーパッド, 最下部=メッセージ) */
     .sidebar {
         display: grid;
         grid-template-columns: auto 1fr;
@@ -513,15 +615,15 @@ h1 {
         gap: 8px;
     }
 
-    /* 左上: 操作ボタン */
-    .sidebar>.info-panel:first-child {
+    /* 左上: メモトグル (Delキーから離す) */
+    .sidebar>#panel-memo {
         grid-column: 1;
         grid-row: 1;
         padding: 8px;
     }
 
-    /* 左下: メモトグル */
-    .sidebar>.info-panel:nth-child(2) {
+    /* 左下: 操作ボタン */
+    .sidebar>#panel-controls {
         grid-column: 1;
         grid-row: 2;
         padding: 8px;

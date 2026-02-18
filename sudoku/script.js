@@ -1,3 +1,127 @@
+// ===== 多言語対応 (i18n) =====
+
+const translations = {
+    ja: {
+        reset: '最初に戻す',
+        input: '入力',
+        memo: '📝',
+        undoTitle: '元に戻す (Ctrl+Z)',
+        redoTitle: 'やり直す (Ctrl+Y)',
+        clear: '🎉 クリア！',
+        conflictFound: '矛盾が見つかりました！',
+        memoDone: '候補をメモしました 📝',
+        rocketFilled: '🚀 確定セルを埋めました',
+        themeDark: '🌙 ダーク',
+        themeLight: '☀️ ライト',
+        themeSystem: '🖥️ 端末設定',
+        guideMove: '← → ↑ ↓ : セル移動',
+        guideNumber: '1〜9 : 数字入力',
+        guideDel: 'Del / BS : 消去',
+        guideMemo: 'Space : メモ切替',
+        guideUndo: 'Ctrl/⌘+Z : 元に戻す',
+        guideRedo: 'Ctrl/⌘+Y : やり直す',
+    },
+    en: {
+        reset: 'Reset',
+        input: 'Input',
+        memo: '📝',
+        undoTitle: 'Undo (Ctrl+Z)',
+        redoTitle: 'Redo (Ctrl+Y)',
+        clear: '🎉 Cleared!',
+        conflictFound: 'Conflict found!',
+        memoDone: 'Candidates noted 📝',
+        rocketFilled: '🚀 Filled certain cells',
+        themeDark: '🌙 Dark',
+        themeLight: '☀️ Light',
+        themeSystem: '🖥️ System',
+        guideMove: '← → ↑ ↓ : Move cell',
+        guideNumber: '1-9 : Enter number',
+        guideDel: 'Del / BS : Delete',
+        guideMemo: 'Space : Toggle memo',
+        guideUndo: 'Ctrl/⌘+Z : Undo',
+        guideRedo: 'Ctrl/⌘+Y : Redo',
+    }
+};
+
+let currentLang = localStorage.getItem('sudoku-lang') || 'ja';
+
+// 翻訳関数
+function t(key) {
+    return translations[currentLang]?.[key] || translations.ja[key] || key;
+}
+
+// 言語をDOMに反映する
+function applyLanguage(lang) {
+    currentLang = lang;
+    localStorage.setItem('sudoku-lang', lang);
+
+    // data-i18n 属性を持つ要素のtextContentを更新
+    document.querySelectorAll('[data-i18n]').forEach(el => {
+        const key = el.getAttribute('data-i18n');
+        if (translations[lang]?.[key]) {
+            el.textContent = translations[lang][key];
+        }
+    });
+
+    // data-i18n-title 属性を持つ要素のtitleを更新
+    document.querySelectorAll('[data-i18n-title]').forEach(el => {
+        const key = el.getAttribute('data-i18n-title');
+        if (translations[lang]?.[key]) {
+            el.title = translations[lang][key];
+        }
+    });
+
+    // data-i18n-option 属性を持つ<option>のtextContentを更新
+    document.querySelectorAll('[data-i18n-option]').forEach(el => {
+        const key = el.getAttribute('data-i18n-option');
+        if (translations[lang]?.[key]) {
+            el.textContent = translations[lang][key];
+        }
+    });
+
+    // html lang属性を更新
+    document.documentElement.lang = lang === 'en' ? 'en' : 'ja';
+}
+
+// ===== テーマ切り替え =====
+
+function applyTheme(theme) {
+    localStorage.setItem('sudoku-theme', theme);
+    if (theme === 'system') {
+        // 端末の設定に合わせる
+        const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+        document.documentElement.setAttribute('data-theme', prefersDark ? 'dark' : 'light');
+    } else {
+        document.documentElement.setAttribute('data-theme', theme);
+    }
+}
+
+// システムテーマ変更の監視
+window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => {
+    if (localStorage.getItem('sudoku-theme') === 'system') {
+        applyTheme('system');
+    }
+});
+
+// 初期化: テーマと言語を適用
+(function initSettings() {
+    const savedTheme = localStorage.getItem('sudoku-theme') || 'dark';
+    const savedLang = localStorage.getItem('sudoku-lang') || 'ja';
+
+    // プルダウンの選択状態を復元
+    const themeSelect = document.getElementById('theme-select');
+    const langSelect = document.getElementById('lang-select');
+    if (themeSelect) themeSelect.value = savedTheme;
+    if (langSelect) langSelect.value = savedLang;
+
+    applyTheme(savedTheme);
+    applyLanguage(savedLang);
+
+    // イベントリスナー
+    themeSelect?.addEventListener('change', (e) => applyTheme(e.target.value));
+    langSelect?.addEventListener('change', (e) => applyLanguage(e.target.value));
+})();
+
 // ===== 状態管理 =====
 
 let solution = [];        // 解答盤面
@@ -568,7 +692,7 @@ function inputNumber(num) {
     lastActionWasRocket = false;
 
     if (!memoMode && checkWin()) {
-        messageEl.textContent = '🎉 クリア！';
+        messageEl.textContent = t('clear');
     }
 }
 
@@ -659,7 +783,7 @@ document.querySelectorAll('.diff-btn').forEach(btn => {
 });
 
 document.getElementById('btn-reset').addEventListener('click', () => {
-    if (confirm('本当に最初の状態に戻しますか？\n入力した数字やメモはすべて消去されます。')) {
+    if (confirm('本当に最初の状態に戻しますか？ / Reset to initial state?\n入力した数字やメモはすべて消去されます。\nAll input and memos will be cleared.')) {
         resetBoard();
     }
 });
@@ -720,7 +844,7 @@ function handleRocket() {
     }
 
     if (conflictFound) {
-        messageEl.textContent = '矛盾が見つかりました！';
+        messageEl.textContent = t('conflictFound');
     }
 
     // 2. Auto-fill Memos (Conditions: No changes by singles AND previous action was Rocket AND empty cells exist)
@@ -756,7 +880,7 @@ function handleRocket() {
             }
             changesMade = true;
             memoFilled = true;
-            messageEl.textContent = '候補をメモしました 📝';
+            messageEl.textContent = t('memoDone');
         }
     }
 
@@ -766,7 +890,7 @@ function handleRocket() {
     if (checkWin()) {
         messageEl.textContent = '🎉 クリア！';
     } else if (changesMade && !conflictFound && !memoFilled) {
-        messageEl.textContent = '🚀 確定セルを埋めました';
+        messageEl.textContent = t('rocketFilled');
     }
 
     lastActionWasRocket = true; // フラグセット

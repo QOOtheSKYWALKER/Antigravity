@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="ja">
+<html lang="ja" data-theme="dark">
 
 <head>
     <meta charset="UTF-8">
@@ -22,22 +22,24 @@
             <div id="board" class="board"></div>
         </div>
         <div class="sidebar">
-            <div class="info-panel">
-                <button id="btn-reset" class="reset-btn">最初に戻す</button>
+            <div class="info-panel" id="panel-controls">
+                <button id="btn-reset" class="reset-btn" data-i18n="reset">最初に戻す</button>
                 <button id="btn-rocket" class="rocket-btn">🚀</button>
                 <div class="undo-redo-buttons">
-                    <button id="btn-undo" class="undo-redo-btn" title="元に戻す (Ctrl+Z)" disabled>↩</button>
-                    <button id="btn-redo" class="undo-redo-btn" title="やり直す (Ctrl+Y)" disabled>↪</button>
+                    <button id="btn-undo" class="undo-redo-btn" data-i18n-title="undoTitle" title="元に戻す (Ctrl+Z)"
+                        disabled>↩</button>
+                    <button id="btn-redo" class="undo-redo-btn" data-i18n-title="redoTitle" title="やり直す (Ctrl+Y)"
+                        disabled>↪</button>
                 </div>
             </div>
-            <div class="info-panel">
+            <div class="info-panel" id="panel-memo">
                 <div class="mode-toggle-wrapper">
-                    <span class="mode-label active" id="label-input">入力</span>
+                    <span class="mode-label active" id="label-input" data-i18n="input">入力</span>
                     <label class="toggle-switch">
                         <input type="checkbox" id="memo-toggle">
                         <span class="toggle-slider"></span>
                     </label>
-                    <span class="mode-label" id="label-memo">メモ</span>
+                    <span class="mode-label" id="label-memo" data-i18n="memo">メモ</span>
                 </div>
             </div>
             <div id="message" class="message"></div>
@@ -61,15 +63,26 @@
                     <button class="key-btn action-btn bg-red" id="key-delete">Del</button>
                 </div>
             </div>
-            <div class="controls-guide">
-                <p>← → ↑ ↓ : セル移動</p>
-                <p>1〜9 : 数字入力</p>
-                <p>Del / BS : 消去</p>
-                <p>Space : メモ切替</p>
-                <p>Ctrl/⌘+Z : 元に戻す</p>
-                <p>Ctrl/⌘+Y : やり直す</p>
+            <div class="controls-guide" id="controls-guide">
+                <p data-i18n="guideMove">← → ↑ ↓ : セル移動</p>
+                <p data-i18n="guideNumber">1〜9 : 数字入力</p>
+                <p data-i18n="guideDel">Del / BS : 消去</p>
+                <p data-i18n="guideMemo">Space : メモ切替</p>
+                <p data-i18n="guideUndo">Ctrl/⌘+Z : 元に戻す</p>
+                <p data-i18n="guideRedo">Ctrl/⌘+Y : やり直す</p>
             </div>
         </div>
+    </div>
+    <div class="settings-bar">
+        <select id="theme-select">
+            <option value="dark" data-i18n-option="themeDark">🌙 ダーク</option>
+            <option value="light" data-i18n-option="themeLight">☀️ ライト</option>
+            <option value="system" data-i18n-option="themeSystem">🖥️ 端末設定</option>
+        </select>
+        <select id="lang-select">
+            <option value="ja">🇯🇵 JP</option>
+            <option value="en">🇺🇸 EN</option>
+        </select>
     </div>
     <script src="solver.js"></script>
     <script src="script.js"></script>
