@@ -122,11 +122,11 @@ class SudokuLogicalSolver {
         // HARD: X-Wing / Y-Wing / Swordfish / Skyscraper / W-Wing が必要
         const levels = {
             'Naked Single': 'basic',
-            'Hidden Single': 'basic',
-            'Naked Pair': 'easy',
-            'Locked Candidates': 'easy',
-            'Locked Candidates (Pointing)': 'easy',
-            'Locked Candidates (Claiming)': 'easy',
+            'Hidden Single': 'easy',
+            'Naked Pair': 'medium',
+            'Locked Candidates': 'medium',
+            'Locked Candidates (Pointing)': 'medium',
+            'Locked Candidates (Claiming)': 'medium',
             'Hidden Pair': 'medium',
             'Naked Triple': 'medium',
             'Hidden Triple': 'medium',

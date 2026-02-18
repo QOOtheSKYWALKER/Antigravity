@@ -233,18 +233,21 @@ function generatePuzzle(difficulty) {
     let attempts = 0;
     const maxAttempts = 1000;
     const startTime = Date.now();
+    console.log(`Generating ${difficulty} puzzle...`);
 
-    // 難易度ごとの抜くマス数の範囲
+
+    // 難易度ごとの抜くマス数の範囲（全難易度で共通化）
     const removeRanges = {
-        easy: [40, 48],
-        medium: [40, 54],
-        hard: [48, 56]
+        easy: [60, 70],
+        medium: [60, 70],
+        hard: [60, 70]
     };
 
     // フォールバック優先度（目標に近い難易度を優先保存）
+    // mediumはeasy(Hidden Single)へのフォールバックを許可
     const fallbackRank = {
         easy: { 'basic': 1 },
-        medium: {},
+        medium: { 'easy': 1 },
         hard: { 'medium': 2, 'easy': 1 }
     };
 
