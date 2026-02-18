@@ -244,7 +244,7 @@ function generatePuzzle(difficulty) {
     // フォールバック優先度（目標に近い難易度を優先保存）
     const fallbackRank = {
         easy: { 'basic': 1 },
-        medium: { 'basic': 1 },
+        medium: {},
         hard: { 'medium': 2, 'easy': 1 }
     };
 
