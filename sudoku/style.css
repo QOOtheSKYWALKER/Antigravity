@@ -396,7 +396,7 @@ h1 {
 }
 
 .keypad-row-single {
-    justifyContent: center;
+    justify-content: center;
 }
 
 .keypad-row-single .key-btn {
@@ -444,11 +444,11 @@ h1 {
 }
 
 
-/* ===== モバイルレイアウト (600px未満) ===== */
-@media screen and (max-width: 600px) {
+/* ===== モバイルレイアウト (720px未満) ===== */
+@media screen and (max-width: 720px) {
     body {
         align-items: flex-start;
-        padding: 10px 0;
+        padding: 6px 0;
         overflow: auto;
         /* 縦スクロール許可 */
     }
@@ -458,8 +458,8 @@ h1 {
         /* 縦積み */
         width: 100%;
         max-width: 100%;
-        padding: 10px;
-        gap: 16px;
+        padding: 8px;
+        gap: 10px;
         box-shadow: none;
         border: none;
         background-color: transparent;
@@ -478,65 +478,78 @@ h1 {
 
     /* 盤面: 横幅いっぱい */
     .board {
-        --cell-size: calc((100vw - 24px) / 9);
-        /* 余白考慮 */
+        --cell-size: calc((100vw - 20px) / 9);
         width: fit-content;
         margin: 0 auto;
     }
 
+    /* セルのウェイトを細くする */
     .cell {
         font-size: calc(var(--cell-size) * 0.55);
+        font-weight: 500;
+    }
+
+    .cell.given {
+        font-weight: 500;
     }
 
     .cell.same-number {
         font-size: calc(var(--cell-size) * 0.7);
+        font-weight: 700;
     }
 
     .cell .memo-grid span {
         font-size: calc(var(--cell-size) * 0.25);
     }
 
-    /* サイドバー: 横並び・折り返し */
+    /* サイドバー: 2列グリッド（左40%=コントロール, 右60%=キーパッド） */
     .sidebar {
-        display: flex;
-        flex-direction: row;
-        flex-wrap: wrap;
+        display: grid;
+        grid-template-columns: 40% 1fr;
+        grid-template-rows: auto auto auto;
         width: 100%;
         min-width: 0;
-        gap: 10px;
+        gap: 8px;
     }
 
-    /* パネル順序制御: コントロール系を先に、キーパッドを後に */
+    /* ===== 左列: コントロール群 ===== */
+    /* リセット・ロケット・Undo/Redo */
     .sidebar>.info-panel:first-child {
-        /* Rocket/Reset */
-        width: 100%;
-        /* 横幅いっぱい */
-        order: 1;
+        grid-column: 1;
+        grid-row: 1;
+        padding: 8px;
     }
 
+    /* メモトグル */
     .sidebar>.info-panel:nth-child(2) {
-        /* Memo toggle */
-        flex: 1;
-        order: 2;
+        grid-column: 1;
+        grid-row: 2;
+        padding: 8px;
     }
 
+    /* メッセージ */
     .message {
-        flex: 1;
-        order: 3;
-        min-width: 100px;
+        grid-column: 1;
+        grid-row: 3;
+        font-size: 0.8rem;
+        min-height: 20px;
     }
 
+    /* ===== 右列: キーパッド ===== */
     .keypad {
-        width: 100%;
+        grid-column: 2;
+        grid-row: 1 / 4;
+        /* 3行分ぶち抜き */
         display: flex;
         flex-direction: column;
-        order: 4;
+        gap: 4px;
+        justify-content: center;
     }
 
     .keypad-row .key-btn {
-        height: 48px;
+        height: 44px;
         /* タップしやすい大きさ */
-        font-size: 1.2rem;
+        font-size: 1.1rem;
     }
 
     /* モバイルではガイド非表示 */
