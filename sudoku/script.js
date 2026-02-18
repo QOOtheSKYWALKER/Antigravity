@@ -240,7 +240,7 @@ function generatePuzzle(difficulty) {
     const removeRanges = {
         easy: [60, 70],
         medium: [60, 70],
-        hard: [60, 70]
+        hard: [55, 65]
     };
 
     // フォールバック優先度（目標に近い難易度を優先保存）
@@ -317,11 +317,9 @@ function generatePuzzle(difficulty) {
 
         // 完全一致
         if (result.solved && result.difficulty === difficulty) {
-            console.log(`${difficulty} パズル生成: ${attempts}回目で成功 (${Date.now() - startTime}ms)`);
             solution = currentSolution;
             return puzzleGrid;
         }
-
         // フォールバック候補の保存（目標に最も近いものを保持）
         if (result.solved) {
             const rank = (fallbackRank[difficulty] || {})[result.difficulty] || 0;
