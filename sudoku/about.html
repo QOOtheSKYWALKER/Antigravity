@@ -347,7 +347,7 @@
         <h1>Sudoku</h1>
         <p class="hero-sub">
             論理的ソルバーによる厳密な難易度制御と、
-            洗練されたダークUIを備えたブラウザベースの数独パズル。
+            洗練されたUI（ダーク/ライト対応）を備えたブラウザベースの数独パズル。
         </p>
         <img class="hero-screenshot" src="screenshot.png" alt="Antigravity Sudoku のスクリーンショット">
         <a href="index.html" class="play-btn">
@@ -378,7 +378,7 @@
             <div class="feature-card">
                 <span class="feature-icon">📝</span>
                 <h3>メモモード</h3>
-                <p>トグルスイッチで入力モードとメモモードをワンタッチ切替。候補の管理が直感的に行えます。</p>
+                <p>トグルスイッチで入力モードとメモモードをワンタッチ切替。モバイル画面でも操作しやすい配置。</p>
             </div>
             <div class="feature-card">
                 <span class="feature-icon">↩️</span>
@@ -386,9 +386,9 @@
                 <p>最大127ステップの履歴管理。ロケットボタンの操作も1ステップとしてまとめて戻せます。</p>
             </div>
             <div class="feature-card">
-                <span class="feature-icon">🌙</span>
-                <h3>ダークモードUI</h3>
-                <p>目に優しいダークテーマ。同一数字ハイライト、エラー検出など、ゲーム体験を支える視覚フィードバック。</p>
+                <span class="feature-icon">🎨</span>
+                <h3>テーマ & 言語設定</h3>
+                <p>ダーク/ライトモードの切り替えに加え、端末設定との連動も可能。日本語・英語の表示言語切り替えにも対応。</p>
             </div>
         </div>
     </section>
@@ -408,18 +408,18 @@
             <tbody>
                 <tr>
                     <td><span class="tag tag-easy">Easy</span></td>
-                    <td>Naked Pair, Locked Candidates</td>
-                    <td>行・列・ブロックの交差分析によるペア除外。基本的パターン認識が鍵。</td>
+                    <td>Hidden Single (隠れたシングル)</td>
+                    <td>行・列・ブロック内で、ある数字が入る場所が1箇所しかないマスを見つける。</td>
                 </tr>
                 <tr>
                     <td><span class="tag tag-medium">Medium</span></td>
-                    <td>Hidden Pair, Naked Triple, Hidden Triple</td>
-                    <td>候補の中に隠れたペアやトリプルを発見する洞察力が試される。</td>
+                    <td>Pairs, Triples, Locked Candidates</td>
+                    <td>候補のペアやトリプル、交差関係（Pointing/Claiming）を利用した候補の除外が必要。</td>
                 </tr>
                 <tr>
                     <td><span class="tag tag-hard">Hard</span></td>
-                    <td>X-Wing, Swordfish, Y-Wing, W-Wing, Skyscraper</td>
-                    <td>行列をまたぐフィッシュ系パターンや、強弱リンクを使った高度な推論が必要。</td>
+                    <td>X-Wing, Y-Wing, Swordfish 等</td>
+                    <td>行列をまたぐフィッシュ系パターンや、強弱リンクを使った高度な多段階推論が必要。</td>
                 </tr>
             </tbody>
         </table>
