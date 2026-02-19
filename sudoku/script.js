@@ -22,6 +22,11 @@ const translations = {
         guideRedo: 'Ctrl/⌘+Y : やり直す',
         modeInput: '入力モード',
         modeMemo: 'メモモード📝',
+        generating: '生成中...',
+        confirmReset: '現在の盤面をリセットしますか？',
+        resetConfirmTitle: '確認',
+        yes: 'はい',
+        no: 'いいえ',
     },
     en: {
         reset: 'Reset',
@@ -44,8 +49,43 @@ const translations = {
         guideRedo: 'Ctrl/⌘+Y : Redo',
         modeInput: 'Input Mode',
         modeMemo: 'Memo Mode 📝',
+        generating: 'Generating...',
+        confirmReset: 'Reset the current board?',
+        resetConfirmTitle: 'Confirm',
+        yes: 'Yes',
+        no: 'No',
     }
 };
+
+// Force inject modal CSS (Workaround for parsing issue)
+(function injectModalCSS() {
+    const style = document.createElement('style');
+    style.textContent = `
+        .modal-overlay {
+            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(0, 0, 0, 0.8); display: flex; justify-content: center;
+            align-items: center; z-index: 1000; opacity: 0; pointer-events: none;
+            transition: opacity 0.3s ease;
+        }
+        .modal-overlay.show { opacity: 1; pointer-events: auto; }
+        .modal-content {
+            background: var(--bg-panel); padding: 24px; border-radius: 12px;
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3); text-align: center;
+            max-width: 300px; width: 90%; transform: translateY(20px);
+            transition: transform 0.3s ease;
+        }
+        .modal-overlay.show .modal-content { transform: translateY(0); }
+        .modal-content h2 { margin-top: 0; margin-bottom: 12px; font-size: 1.2rem; color: var(--text-main); }
+        .modal-content p { margin-bottom: 24px; color: var(--text-sub); }
+        .modal-buttons { display: flex; gap: 12px; }
+        .modal-btn { flex: 1; padding: 10px; border: none; border-radius: 6px; cursor: pointer; font-weight: bold; transition: background 0.2s; }
+        .modal-btn.yes { background: var(--accent-color); color: white; }
+        .modal-btn.yes:hover { filter: brightness(1.1); }
+        .modal-btn.no { background: var(--key-bg); color: var(--text-main); }
+        .modal-btn.no:hover { background: var(--key-hover); }
+    `;
+    document.head.appendChild(style);
+})();
 
 let currentLang = localStorage.getItem('sudoku-lang') || 'ja';
 
@@ -161,211 +201,63 @@ const btnRedo = document.getElementById('btn-redo');
 
 // ===== パズル生成 =====
 
-function solveSudoku(grid) {
-    for (let row = 0; row < 9; row++) {
-        for (let col = 0; col < 9; col++) {
-            if (grid[row][col] === 0) {
-                const numbers = shuffleArray([1, 2, 3, 4, 5, 6, 7, 8, 9]);
-                for (const num of numbers) {
-                    if (isValid(grid, row, col, num)) {
-                        grid[row][col] = num;
-                        if (solveSudoku(grid)) return true;
-                        grid[row][col] = 0;
-                    }
-                }
-                return false;
-            }
-        }
-    }
-    return true;
+// ===== Worker =====
+
+let worker;
+try {
+    worker = new Worker('worker.js');
+    console.log('Worker initialized successfully');
+} catch (e) {
+    console.error('Worker init failed:', e);
+    alert('Worker init failed: ' + e.message + '. Try running on a local server.');
+    throw e; // Stop execution
 }
 
-function isValid(grid, row, col, num) {
-    for (let x = 0; x < 9; x++) {
-        if (grid[row][x] === num) return false;
-    }
-    for (let x = 0; x < 9; x++) {
-        if (grid[x][col] === num) return false;
-    }
-    const br = Math.floor(row / 3) * 3;
-    const bc = Math.floor(col / 3) * 3;
-    for (let r = br; r < br + 3; r++) {
-        for (let c = bc; c < bc + 3; c++) {
-            if (grid[r][c] === num) return false;
-        }
-    }
-    return true;
-}
-
-function shuffleArray(array) {
-    const arr = [...array];
-    for (let i = arr.length - 1; i > 0; i--) {
-        const j = Math.floor(Math.random() * (i + 1));
-        [arr[i], arr[j]] = [arr[j], arr[i]];
-    }
-    return arr;
-}
-
-function countSolutions(grid, limit = 2) {
-    let count = 0;
-    function solve(g) {
-        for (let row = 0; row < 9; row++) {
-            for (let col = 0; col < 9; col++) {
-                if (g[row][col] === 0) {
-                    for (let num = 1; num <= 9; num++) {
-                        if (isValid(g, row, col, num)) {
-                            g[row][col] = num;
-                            solve(g);
-                            if (count >= limit) return;
-                            g[row][col] = 0;
-                        }
-                    }
-                    return;
-                }
-            }
-        }
-        count++;
-    }
-    solve(grid);
-    return count;
-}
-
-function generatePuzzle(difficulty) {
-    let attempts = 0;
-    const maxAttempts = 1000;
-    const startTime = Date.now();
-    console.log(`Generating ${difficulty} puzzle...`);
-
-
-    // 難易度ごとの抜くマス数の範囲（全難易度で共通化）
-    const removeRanges = {
-        easy: [44, 54],
-        medium: [54, 64],
-        hard: [54, 64]
-    };
-
-    // フォールバック優先度（目標に近い難易度を優先保存）
-    // mediumはeasy(Hidden Single)へのフォールバックを許可
-    const fallbackRank = {
-        easy: { 'basic': 1 },
-        medium: { 'easy': 1 },
-        hard: { 'medium': 2, 'easy': 1 }
-    };
-
-    const difficultyStats = {};
-    let bestFallback = null;       // 最も近い難易度のパズルを保存
-    let bestFallbackSolution = null; // フォールバック候補の解答
-    let bestFallbackRank = 0;
-
-    // 高速タイムアウト: 2秒以内に見つからなければフォールバック
-    const fastTimeout = 2000;
-
-    while (attempts < maxAttempts) {
-        attempts++;
-        const elapsed = Date.now() - startTime;
-
-        // タイムアウト: まずフォールバックパズルがあればそれを返す
-        if (elapsed > fastTimeout) {
-            if (bestFallback) {
-                console.log(`${difficulty} パズル生成: ${elapsed}ms でフォールバック使用 (${attempts}回試行)`);
-                solution = bestFallbackSolution;
-                return bestFallback;
-            }
-            // フォールバックもなければさらに探す（最大8秒）
-            if (elapsed > 8000) {
-                console.warn(`${difficulty} パズルの生成がタイムアウト (${attempts}回試行)`);
-                console.log('生成された難易度の分布:', difficultyStats);
-                break;
-            }
-        }
-
-        // 1. 完全な解答を作成
-        const completeGrid = Array.from({ length: 9 }, () => Array(9).fill(0));
-        solveSudoku(completeGrid);
-
-        // 2. 解答をコピー
-        const currentSolution = completeGrid.map(row => [...row]);
-        const puzzleGrid = completeGrid.map(row => [...row]);
-
-        // 3. マスを抜く（範囲内でランダム化）
-        const [minRemove, maxRemove] = removeRanges[difficulty] || [40, 48];
-        let toRemove = minRemove + Math.floor(Math.random() * (maxRemove - minRemove + 1));
-
-        const positions = shuffleArray(
-            Array.from({ length: 81 }, (_, i) => [Math.floor(i / 9), i % 9])
+worker.onmessage = function (e) {
+    const { type, puzzle, solution: sol, difficulty, message } = e.data;
+    if (type === 'success') {
+        solution = sol;
+        board = puzzle.map(r => [...r]);
+        initialBoard = puzzle.map(r => [...r]);
+        givenCells = puzzle.map(r => r.map(v => v !== 0));
+        memos = Array.from({ length: 9 }, () =>
+            Array.from({ length: 9 }, () => new Set())
         );
 
-        for (const [r, c] of positions) {
-            if (toRemove <= 0) break;
-            const backup = puzzleGrid[r][c];
-            puzzleGrid[r][c] = 0;
+        // Reset Game State
+        selectedRow = 0;
+        selectedCol = 0;
+        lastInputNumber = 0;
+        undoStack = [];
+        redoStack = [];
 
-            const solutions = countSolutions(puzzleGrid.map(row => [...row]), 2);
-            if (solutions !== 1) {
-                puzzleGrid[r][c] = backup;
+        messageEl.textContent = ''; // Clear loading
+        boardEl.style.opacity = '1';
+
+        // UI: Remove generating animation and set active
+        document.querySelectorAll('.diff-btn').forEach(btn => {
+            btn.classList.remove('generating');
+            if (btn.dataset.level === difficulty) { // worker returns actual difficulty
+                btn.classList.add('active');
             } else {
-                toRemove--;
+                btn.classList.remove('active');
             }
-        }
+        });
 
-        // 4. 論理ソルバーで難易度判定
-        const solver = new SudokuLogicalSolver(puzzleGrid);
-        const result = solver.solve();
+        updateUndoRedoButtons();
+        renderBoard();
+        lastActionWasRocket = false;
 
-        // 統計追跡
-        const d = result.solved ? result.difficulty : 'unsolved';
-        difficultyStats[d] = (difficultyStats[d] || 0) + 1;
-
-        // 完全一致
-        if (result.solved && result.difficulty === difficulty) {
-            solution = currentSolution;
-            return puzzleGrid;
-        }
-        // フォールバック候補の保存（目標に最も近いものを保持）
-        if (result.solved) {
-            const rank = (fallbackRank[difficulty] || {})[result.difficulty] || 0;
-            if (rank > bestFallbackRank) {
-                bestFallbackRank = rank;
-                bestFallback = puzzleGrid;
-                bestFallbackSolution = currentSolution;
-            }
-        }
+        console.log(`Generated ${difficulty} puzzle via Worker.`);
+    } else if (type === 'error') {
+        console.error('Worker Error:', message);
+        messageEl.textContent = '生成エラーが発生しました';
+        boardEl.style.opacity = '1';
     }
+};
 
-    // 最終フォールバック
-    if (bestFallback) {
-        console.log(`${difficulty} パズル: フォールバック候補を使用`);
-        solution = bestFallbackSolution;
-        return bestFallback;
-    }
+// 元の同期generatePuzzleなどのロジックはworker.jsに移動済み
 
-    console.warn(`${difficulty} パズルの生成に失敗。最終フォールバック実行`);
-    return generateFallback();
-}
-
-// フォールバック: 難易度チェックなしで返す
-function generateFallback() {
-    const completeGrid = Array.from({ length: 9 }, () => Array(9).fill(0));
-    solveSudoku(completeGrid);
-    solution = completeGrid.map(row => [...row]);
-    const puzzleGrid = completeGrid.map(row => [...row]);
-
-    const positions = shuffleArray(
-        Array.from({ length: 81 }, (_, i) => [Math.floor(i / 9), i % 9])
-    );
-    let toRemove = 40;
-    for (const [r, c] of positions) {
-        if (toRemove <= 0) break;
-        const backup = puzzleGrid[r][c];
-        puzzleGrid[r][c] = 0;
-        if (countSolutions(puzzleGrid.map(row => [...row]), 2) !== 1) {
-            puzzleGrid[r][c] = backup;
-        } else {
-            toRemove--;
-        }
-    }
-    return puzzleGrid;
-}
 
 // ===== Undo/Redo =====
 
@@ -524,26 +416,25 @@ function scheduleRender() {
  */
 function initGame(difficulty) {
     currentDifficulty = difficulty;
-    messageEl.textContent = '';
 
-    const puzzle = generatePuzzle(difficulty);
-    board = puzzle.map(r => [...r]);
-    initialBoard = puzzle.map(r => [...r]);
-    givenCells = puzzle.map(r => r.map(v => v !== 0));
-    memos = Array.from({ length: 9 }, () =>
-        Array.from({ length: 9 }, () => new Set())
-    );
+    // UI Loading State
+    messageEl.textContent = t('generating') + ' ⏳';
+    boardEl.style.opacity = '0.5'; // Dim board while loading
 
-    selectedRow = 0;
-    selectedCol = 0;
-    lastInputNumber = 0;
-    undoStack = [];
-    redoStack = [];
+    // UI: Set generating animation
+    document.querySelectorAll('.diff-btn').forEach(btn => {
+        btn.classList.remove('active', 'generating');
+        if (btn.dataset.level === difficulty) {
+            btn.classList.add('generating');
+        }
+    });
 
-    buildBoard();
-    renderBoard();
-    updateUndoRedoButtons();
+    // Request Worker to generate
+    worker.postMessage({ command: 'generate', difficulty: difficulty });
+
+    // Note: board initialization will happen in worker.onmessage
 }
+
 
 /**
  * DOM要素を構築する（initGame時に1回だけ）
@@ -837,10 +728,36 @@ document.querySelectorAll('.diff-btn').forEach(btn => {
     });
 });
 
+const modal = document.getElementById('reset-modal');
+const modalYes = document.getElementById('modal-yes');
+const modalNo = document.getElementById('modal-no');
+
+function showModal() {
+    modal.classList.add('show');
+    modal.classList.remove('hidden');
+}
+
+function hideModal() {
+    modal.classList.remove('show');
+    setTimeout(() => modal.classList.add('hidden'), 300); // wait for transition
+}
+
 document.getElementById('btn-reset').addEventListener('click', () => {
-    if (confirm('本当に最初の状態に戻しますか？ / Reset to initial state?\n入力した数字やメモはすべて消去されます。\nAll input and memos will be cleared.')) {
-        resetBoard();
-    }
+    showModal();
+});
+
+modalYes.addEventListener('click', () => {
+    resetBoard();
+    hideModal();
+});
+
+modalNo.addEventListener('click', () => {
+    hideModal();
+});
+
+// Close on outside click
+modal.addEventListener('click', (e) => {
+    if (e.target === modal) hideModal();
 });
 
 const btnRocket = document.getElementById('btn-rocket');
@@ -994,4 +911,5 @@ btnRedo.addEventListener('click', () => redo());
 
 // ===== ゲーム開始 =====
 
+buildBoard();
 initGame('hard');
