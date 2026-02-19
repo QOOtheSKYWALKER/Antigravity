@@ -148,6 +148,7 @@ h1 {
     transition: all 0.2s ease;
     font-family: var(--font-family);
     white-space: nowrap;
+    touch-action: manipulation;
 }
 
 .diff-btn:hover {
@@ -214,6 +215,7 @@ h1 {
     transition: background-color 0.15s ease;
     position: relative;
     user-select: none;
+    touch-action: manipulation;
 }
 
 .cell.given {
@@ -304,6 +306,7 @@ h1 {
     cursor: pointer;
     transition: all 0.2s ease;
     font-family: var(--font-family);
+    touch-action: manipulation;
 }
 
 .reset-btn:hover {
@@ -324,6 +327,7 @@ h1 {
     cursor: pointer;
     transition: all 0.2s ease;
     font-family: var(--font-family);
+    touch-action: manipulation;
 }
 
 .rocket-btn:hover {
@@ -351,6 +355,7 @@ h1 {
     cursor: pointer;
     transition: all 0.2s ease;
     font-family: var(--font-family);
+    touch-action: manipulation;
 }
 
 .undo-redo-btn:hover:not(:disabled) {
@@ -378,6 +383,7 @@ h1 {
     transition: color 0.2s ease;
     cursor: pointer;
     user-select: none;
+    touch-action: manipulation;
 }
 
 .mode-label.active {
@@ -407,6 +413,7 @@ h1 {
     background-color: var(--toggle-bg);
     border-radius: 24px;
     transition: background-color 0.3s ease;
+    touch-action: manipulation;
 }
 
 .toggle-slider::before {
@@ -487,6 +494,7 @@ h1 {
     transition: background-color 0.2s, transform 0.1s, opacity 0.3s;
     user-select: none;
     -webkit-tap-highlight-color: transparent;
+    touch-action: manipulation;
 }
 
 .key-btn.completed {

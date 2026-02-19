@@ -147,6 +147,7 @@ let redoStack = [];         // Redo用スタック
 
 // 描画キャッシュ
 let cells = [];             // セルDOM要素のキャッシュ
+let cellStateCache = [];    // 描画状態キャッシュ
 let renderPending = false;  // 描画バッチ処理フラグ
 
 // DOM要素
@@ -238,9 +239,9 @@ function generatePuzzle(difficulty) {
 
     // 難易度ごとの抜くマス数の範囲（全難易度で共通化）
     const removeRanges = {
-        easy: [60, 70],
-        medium: [60, 70],
-        hard: [55, 65]
+        easy: [44, 54],
+        medium: [54, 64],
+        hard: [54, 64]
     };
 
     // フォールバック優先度（目標に近い難易度を優先保存）
@@ -550,6 +551,7 @@ function initGame(difficulty) {
 function buildBoard() {
     boardEl.innerHTML = '';
     cells = [];
+    cellStateCache = Array.from({ length: 9 }, () => new Array(9).fill(null));
 
     for (let row = 0; row < 9; row++) {
         cells[row] = [];
@@ -573,8 +575,11 @@ function buildBoard() {
     }
 }
 
+// ... (DOM要素の定義など) ...
+
 /**
  * 盤面の表示を更新する（DOM要素は再利用、中身だけ更新）
+ * モバイルパフォーマンス最適化: 状態に変更がない場合はDOM操作をスキップする
  */
 function renderBoard() {
     const selectedVal = board[selectedRow][selectedCol];
@@ -586,8 +591,9 @@ function renderBoard() {
         for (let col = 0; col < 9; col++) {
             const cell = cells[row][col];
             const value = board[row][col];
+            const memoSet = memos[row][col];
 
-            // クラスを文字列で一括設定（classList操作より高速）
+            // 1. クラス名の構築
             let cls = 'cell';
             if (col % 3 === 2 && col !== 8) cls += ' border-right';
             if (row % 3 === 2 && row !== 8) cls += ' border-bottom';
@@ -605,24 +611,47 @@ function renderBoard() {
                 cls += ' same-number';
             }
 
+            // 衝突判定は重いので、変更があった場合やエラー表示が必要な場合のみ計算したいが、
+            // 盤面全体の整合性は常にチェックする必要があるため、ここは維持。
+            // ただし hasConflict 自体は軽量な配列アクセスのみ。
             if (value !== 0 && !givenCells[row][col] && hasConflict(row, col, value)) {
                 cls += ' error';
             }
 
+            // 2. メモの署名 (内容 + ハイライト対象)
+            // メモの内容が変わっていなくても、targetNumberが変わればハイライトが変わるため、targetNumberも含める
+            let memoSig = '';
+            if (value === 0 && memoSet.size > 0) {
+                // Setの順序は保証されないが、要素が数字のみなのでソートして文字列化
+                // メモが頻繁に書き換わることは少ないので、このコストはDOM生成より低い
+                memoSig = Array.from(memoSet).sort().join(',') + '|' + targetNumber;
+            }
+
+            // 3. 状態の署名を作成 (クラス名 + 値 + メモ署名)
+            const newSig = `${cls}|${value}|${memoSig}`;
+
+            // 4. キャッシュと比較 (変更がなければスキップ)
+            if (cellStateCache[row][col] === newSig) {
+                continue;
+            }
+
+            // 5. DOM更新
+            cellStateCache[row][col] = newSig;
             cell.className = cls;
 
-            // セル内容の更新
             if (value !== 0) {
                 if (cell.childElementCount > 0 || cell.textContent !== String(value)) {
                     cell.textContent = value;
                 }
-            } else if (memos[row][col].size > 0) {
+            } else if (memoSet.size > 0) {
+                // メモの再描画
+                // ここはDOM生成コストがかかるが、Diffingにより頻度は激減する
                 cell.textContent = '';
                 const memoGrid = document.createElement('div');
                 memoGrid.className = 'memo-grid';
                 for (let n = 1; n <= 9; n++) {
                     const span = document.createElement('span');
-                    if (memos[row][col].has(n)) {
+                    if (memoSet.has(n)) {
                         span.textContent = n;
                         if (targetNumber !== 0 && n === targetNumber) {
                             span.classList.add('memo-highlight');
