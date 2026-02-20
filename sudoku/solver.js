@@ -1220,9 +1220,24 @@ SudokuLogicalSolver.generatePuzzle = function (difficulty) {
         const solution = grid.map(r => [...r]);
         const puzzle = grid.map(r => [...r]);
 
-        // 全セルをランダムな順番でテスト
-        const cells = Array.from({ length: 81 }, (_, i) => [Math.floor(i / 9), i % 9]);
-        const shuffledCells = SudokuLogicalSolver.shuffleArray(cells);
+        // 削る順番の決定（easy, medium は線対称、それ以外は完全ランダム）
+        let shuffledCells = [];
+        if (difficulty === 'easy' || difficulty === 'medium') {
+            const groups = [];
+            for (let r = 0; r < 9; r++) {
+                for (let c = 0; c < 4; c++) {
+                    groups.push([[r, c], [r, 8 - c]]);
+                }
+                groups.push([[r, 4]]); // センターライン
+            }
+            const shuffledGroups = SudokuLogicalSolver.shuffleArray(groups);
+            shuffledGroups.forEach(group => {
+                group.forEach(cell => shuffledCells.push(cell));
+            });
+        } else {
+            const cells = Array.from({ length: 81 }, (_, i) => [Math.floor(i / 9), i % 9]);
+            shuffledCells = SudokuLogicalSolver.shuffleArray(cells);
+        }
 
         for (const [r, c] of shuffledCells) {
             const val = puzzle[r][c];
