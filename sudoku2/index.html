@@ -4,49 +4,119 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Antigravity Sudoku</title>
+    <title>Sudoku OCR Playground</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="style.css">
 </head>
 
 <body>
     <div class="container">
-        <div class="game-area">
-            <h1>SUDOKU</h1>
-            <div id="board" class="board"></div>
+        <h1>Sudoku OCR Test Playground</h1>
+
+        <div id="debug-log"
+            style="background:#000; color:#0f0; padding:10px; margin-bottom:20px; font-family:monospace; font-size:12px; border:1px solid #333; height:100px; overflow-y:scroll;">
+            <div>[System] Diagnostics initialized...</div>
         </div>
-        <div class="sidebar">
-            <div class="info-panel">
-                <h2>DIFFICULTY</h2>
-                <div class="difficulty-buttons">
-                    <button id="btn-easy" class="diff-btn" data-level="easy">Easy</button>
-                    <button id="btn-medium" class="diff-btn" data-level="medium">Medium</button>
-                    <button id="btn-hard" class="diff-btn active" data-level="hard">Hard</button>
+
+        <div class="upload-area" id="drop-zone">
+            <p>ここに画像をドラッグ＆ドロップ</p>
+            <p>または</p>
+            <input type="file" id="file-input" accept="image/png, image/jpeg, image/webp" hidden>
+            <button class="btn" onclick="document.getElementById('file-input').click()">ファイルを選択</button>
+        </div>
+
+        <div class="results-layout">
+            <div class="image-preview">
+                <h2>1. オリジナルプレビュー</h2>
+                <canvas id="preview-canvas" width="400" height="400"></canvas>
+            </div>
+
+            <div class="image-preview">
+                <h2>2. OpenCV 解析＆クロップ</h2>
+                <div id="cv-status" class="status">OpenCV.js 読み込み中...</div>
+                <canvas id="cropped-canvas" width="400" height="400"></canvas>
+            </div>
+
+            <div class="ocr-output">
+                <h2>3. Tesseract.js 81マス個別解析</h2>
+                <div class="status" id="ocr-status">待機中...</div>
+                <div class="controls">
+                    <button class="btn btn-primary" id="btn-analyze" disabled>生データを抽出＆解析</button>
+                    <div id="progress-bar"
+                        style="display:none; width: 100%; height: 10px; background: #333; margin-top: 10px; border-radius: 5px;">
+                        <div id="progress-fill"
+                            style="width: 0%; height: 100%; background: #64b5f6; border-radius: 5px; transition: width 0.1s;">
+                        </div>
+                    </div>
                 </div>
+                <!-- 81マスのプレビューグリッド -->
+                <div id="cells-grid" class="cells-grid"></div>
+
+                <h3>最終出力（配列）</h3>
+                <pre class="code-block" id="ocr-result">ここに結果配列が表示されます。</pre>
             </div>
-            <div class="info-panel">
-                <button id="btn-new" class="new-game-btn">新しい問題</button>
-                <button id="btn-reset" class="reset-btn">最初に戻す</button>
-                <div class="undo-redo-buttons">
-                    <button id="btn-undo" class="undo-redo-btn" disabled>↩ 戻す</button>
-                    <button id="btn-redo" class="undo-redo-btn" disabled>↪ やり直す</button>
+        </div>
+
+        <!-- インページ対話的エラー修正用モーダルUI -->
+        <div id="ocr-correction-modal" class="modal-overlay" style="display: none;">
+            <div class="modal-content">
+                <h3>⚠️ OCR抽出エラー</h3>
+                <p>以下のマスに数字（1〜9）があるはずですが、読み取れませんでした。<br>画像を見て、正しい数字を入力してください。</p>
+                <div class="modal-image-container">
+                    <!-- canvasの内容をこのimgに転写して拡大表示する -->
+                    <img id="modal-cell-image" src="" alt="認識エラーのマス" />
                 </div>
-            </div>
-            <div class="info-panel">
-                <h2>MODE</h2>
-                <div id="mode-display" class="mode-display">入力モード</div>
-            </div>
-            <div id="message" class="message"></div>
-            <div class="controls-guide">
-                <p>← → ↑ ↓ : セル移動</p>
-                <p>1〜9 : 数字入力</p>
-                <p>Del / BS : 消去</p>
-                <p>Space : メモ切替</p>
-                <p>Ctrl/⌘+Z : 元に戻す</p>
-                <p>Ctrl/⌘+Y : やり直す</p>
+                <div class="modal-input-group">
+                    <input type="number" id="modal-digit-input" min="1" max="9" placeholder="1〜9を入力" autofocus>
+                </div>
+                <div class="modal-actions">
+                    <button id="modal-btn-skip" class="btn">スキップ（空欄にする）</button>
+                    <button id="modal-btn-submit" class="btn btn-primary">確定</button>
+                </div>
             </div>
         </div>
     </div>
-    <script src="script.js"></script>
+
+    <script>
+        // Diagnostic logger
+        function log(msg) {
+            console.log(msg);
+            const logEl = document.getElementById('debug-log');
+            if (logEl) {
+                const div = document.createElement('div');
+                div.textContent = `[${new Date().toLocaleTimeString()}] ${msg}`;
+                logEl.appendChild(div);
+                logEl.scrollTop = logEl.scrollHeight;
+            }
+        }
+
+        // Global Module for OpenCV.js - MUST BE DEFINED BEFORE opencv.js
+        var Module = {
+            onRuntimeInitialized: function () {
+                log('OpenCV.js WASM Ready (Module.onRuntimeInitialized)');
+                if (typeof onOpenCvReady === 'function') {
+                    onOpenCvReady();
+                } else {
+                    window.cvRuntimeReady = true;
+                }
+            }
+        };
+
+        window.onerror = function (msg, url, line) {
+            log(`SITE ERROR: ${msg} (at ${url}:${line})`);
+        };
+
+        log('Debug system online. Loading scripts...');
+    </script>
+
+    <!-- Using LOCAL OpenCV.js to avoid CDN failures -->
+    <script async src="lib/opencv.js" onload="log('OpenCV.js Script Downloaded (Local)');"
+        onerror="log('FAILED to load LOCAL lib/opencv.js');" type="text/javascript"></script>
+
+    <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"
+        onload="log('Tesseract.js Script Loaded');"></script>
+
+    <script src="script.js" onload="log('script.js Loaded');"></script>
 </body>
 
 </html>

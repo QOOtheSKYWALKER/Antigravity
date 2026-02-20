@@ -1,301 +1,264 @@
-/* デザインシステム：テトリスと統一感のあるダークモード */
 :root {
     --bg-color: #121212;
     --panel-bg: #1e1e1e;
-    --cell-bg: #252525;
-    --cell-selected: #2a3a5c;
-    --cell-highlight: #1e2a3a;
-    --cell-same-num: #1e3552;
-    --cell-error: rgba(255, 60, 60, 0.3);
     --text-color: #e0e0e0;
-    --text-given: #8a9ab8;
-    --text-user: #64b5f6;
-    --text-error: #ff6b6b;
     --accent-color: #64b5f6;
     --border-color: #333;
-    --border-box: #666;
-    --font-family: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    --btn-bg: #333;
+    --btn-hover-bg: #444;
+}
+
+* {
+    box-sizing: border-box;
 }
 
 body {
     background-color: var(--bg-color);
     color: var(--text-color);
-    font-family: var(--font-family);
+    font-family: 'Inter', sans-serif;
     margin: 0;
+    padding: 20px;
     display: flex;
     justify-content: center;
-    align-items: center;
-    height: 100vh;
-    overflow: hidden;
 }
 
 .container {
-    display: flex;
-    gap: 30px;
+    max-width: 900px;
+    width: 100%;
+}
+
+h1,
+h2 {
+    color: var(--accent-color);
+}
+
+/* アップロードエリア */
+.upload-area {
     background-color: var(--panel-bg);
-    padding: 30px;
-    border-radius: 16px;
-    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
-    border: 1px solid var(--border-color);
-}
-
-.game-area {
+    border: 2px dashed var(--border-color);
+    border-radius: 12px;
+    padding: 40px;
     text-align: center;
+    margin-bottom: 30px;
+    transition: all 0.2s;
 }
 
-h1 {
-    font-size: 1.5rem;
-    margin-bottom: 20px;
-    letter-spacing: 4px;
-    color: var(--accent-color);
-}
-
-/* ===== 盤面 ===== */
-.board {
-    display: grid;
-    grid-template-columns: repeat(9, 48px);
-    grid-template-rows: repeat(9, 48px);
-    gap: 1px;
-    background-color: var(--border-color);
-    border: 2px solid var(--border-box);
-    border-radius: 4px;
-    box-shadow: inset 0 0 10px rgba(0, 0, 0, 0.5);
-}
-
-.cell {
-    display: flex;
-    justify-content: center;
-    align-items: center;
-    background-color: var(--cell-bg);
-    font-size: 1.3rem;
-    font-weight: bold;
-    color: var(--text-user);
-    cursor: pointer;
-    transition: background-color 0.15s ease;
-    position: relative;
-    user-select: none;
-}
-
-/* 初期値のセル */
-.cell.given {
-    color: var(--text-given);
-}
-
-/* 選択中のセル */
-.cell.selected {
-    background-color: var(--cell-selected);
-    box-shadow: inset 0 0 0 2px var(--accent-color);
-}
-
-/* 同一行・列・ボックスのハイライト */
-.cell.highlighted {
-    background-color: var(--cell-highlight);
-}
-
-/* 同じ数字のハイライト */
-.cell.same-number {
-    background-color: var(--cell-same-num);
-    font-weight: 900;
-    font-size: 1.5rem;
-    text-shadow: 0 0 6px rgba(100, 181, 246, 0.4);
-}
-
-/* ルール違反 */
-.cell.error {
-    background-color: var(--cell-error);
-    color: var(--text-error);
-}
-
-/* 3×3ボックスの太枠線 */
-.cell.border-right {
-    border-right: 2px solid var(--border-box);
-}
-
-.cell.border-bottom {
-    border-bottom: 2px solid var(--border-box);
-}
-
-/* ===== メモ表示 ===== */
-.cell .memo-grid {
-    display: grid;
-    grid-template-columns: repeat(3, 1fr);
-    grid-template-rows: repeat(3, 1fr);
-    width: 100%;
-    height: 100%;
-    position: absolute;
-    top: 0;
-    left: 0;
-}
-
-.cell .memo-grid span {
-    display: flex;
-    justify-content: center;
-    align-items: center;
-    font-size: 0.65rem;
-    color: #888;
-    font-weight: normal;
-}
-
-/* メモ内の同じ数字を太文字にする */
-.cell .memo-grid span.memo-highlight {
-    font-weight: bold;
-    color: var(--accent-color);
-    font-size: 0.75rem;
-}
-
-/* ===== サイドバー ===== */
-.sidebar {
-    display: flex;
-    flex-direction: column;
-    width: 140px;
-    gap: 10px;
-}
-
-.info-panel {
-    background-color: #252525;
-    padding: 15px;
-    border-radius: 8px;
-    text-align: center;
-}
-
-.info-panel h2 {
-    font-size: 0.8rem;
-    margin: 0 0 10px 0;
-    color: #888;
-    text-transform: uppercase;
-    letter-spacing: 1px;
-}
-
-.difficulty-buttons {
-    display: flex;
-    flex-direction: column;
-    gap: 6px;
-}
-
-.diff-btn {
-    background-color: #333;
-    color: #aaa;
-    border: 1px solid #444;
-    padding: 8px 0;
-    border-radius: 6px;
-    font-size: 0.8rem;
-    cursor: pointer;
-    transition: all 0.2s ease;
-    font-family: var(--font-family);
-}
-
-.diff-btn:hover {
-    background-color: #444;
-    color: #ddd;
-}
-
-.diff-btn.active {
-    background-color: var(--accent-color);
-    color: #121212;
+.upload-area.dragover {
     border-color: var(--accent-color);
-    font-weight: bold;
+    background-color: rgba(100, 181, 246, 0.1);
 }
 
-.new-game-btn {
-    width: 100%;
-    padding: 10px 0;
-    background-color: #1e2d4e;
-    color: var(--accent-color);
-    border: 1px solid var(--accent-color);
-    border-radius: 8px;
-    font-size: 0.85rem;
-    font-weight: bold;
-    cursor: pointer;
-    transition: all 0.2s ease;
-    font-family: var(--font-family);
-}
-
-.new-game-btn:hover {
-    background-color: var(--accent-color);
-    color: #121212;
-}
-
-.reset-btn {
-    width: 100%;
-    padding: 8px 0;
-    margin-top: 8px;
-    background-color: transparent;
-    color: #888;
-    border: 1px solid #555;
-    border-radius: 8px;
-    font-size: 0.75rem;
-    cursor: pointer;
-    transition: all 0.2s ease;
-    font-family: var(--font-family);
-}
-
-.reset-btn:hover {
-    background-color: rgba(255, 60, 60, 0.15);
-    color: #ff6b6b;
-    border-color: #ff6b6b;
-}
-
-.undo-redo-buttons {
-    display: flex;
-    gap: 8px;
-    margin-top: 8px;
-}
-
-.undo-redo-btn {
-    flex: 1;
-    padding: 7px 0;
-    background-color: transparent;
+.btn {
+    background-color: var(--btn-bg);
     color: var(--text-color);
-    border: 1px solid #555;
-    border-radius: 8px;
-    font-size: 0.7rem;
+    border: 1px solid var(--border-color);
+    padding: 10px 20px;
+    border-radius: 6px;
     cursor: pointer;
-    transition: all 0.2s ease;
-    font-family: var(--font-family);
+    font-size: 1rem;
+    transition: 0.2s;
 }
 
-.undo-redo-btn:hover:not(:disabled) {
-    background-color: var(--cell-highlight);
+.btn:hover:not(:disabled) {
+    background-color: var(--btn-hover-bg);
+}
+
+.btn-primary {
+    background-color: #2a3a5c;
     border-color: var(--accent-color);
     color: var(--accent-color);
+    font-weight: bold;
 }
 
-.undo-redo-btn:disabled {
-    opacity: 0.3;
+.btn-primary:hover:not(:disabled) {
+    background-color: #1e3552;
+}
+
+.btn:disabled {
+    opacity: 0.5;
     cursor: not-allowed;
 }
 
-.mode-display {
-    font-size: 0.9rem;
+/* 結果レイアウト */
+.results-layout {
+    display: grid;
+    grid-template-columns: 1fr 1fr 1fr;
+    gap: 20px;
+}
+
+.image-preview,
+.ocr-output {
+    background-color: var(--panel-bg);
+    padding: 20px;
+    border-radius: 12px;
+    border: 1px solid var(--border-color);
+    display: flex;
+    flex-direction: column;
+}
+
+canvas {
+    max-width: 100%;
+    height: auto;
+    border: 1px solid var(--border-color);
+    background-color: #000;
+}
+
+.code-block {
+    background-color: #0a0a0f;
+    padding: 15px;
+    border-radius: 8px;
+    border: 1px solid var(--border-color);
+    font-family: monospace;
+    white-space: pre-wrap;
+    overflow-y: auto;
+    flex-grow: 1;
+    max-height: 400px;
+    color: #a8c7fa;
+}
+
+.status {
+    margin-bottom: 15px;
     font-weight: bold;
-    color: var(--text-color);
-    padding: 6px 0;
+    color: #aaa;
 }
 
-.mode-display.memo-on {
-    color: #f0a000;
+/* 81分割用プレビューグリッド */
+.cells-grid {
+    display: grid;
+    grid-template-columns: repeat(9, 1fr);
+    gap: 1px;
+    background-color: var(--accent-color);
+    border: 2px solid var(--accent-color);
+    margin-top: 15px;
+    margin-bottom: 15px;
+    width: 100%;
+    aspect-ratio: 1;
 }
 
-.message {
+.cells-grid canvas {
+    width: 100%;
+    height: 100%;
+    background-color: var(--bg-color);
+    border: none;
+    display: block;
+}
+
+/* インページ対話的エラー修正用モーダルUI */
+.modal-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100vw;
+    height: 100vh;
+    background: rgba(0, 0, 0, 0.85);
+    /* ダークな半透明背景 */
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    z-index: 1000;
+    backdrop-filter: blur(4px);
+    /* 背景をぼかす */
+}
+
+.modal-content {
+    background: var(--panel-bg);
+    border: 1px solid var(--border-color);
+    border-radius: 12px;
+    padding: 30px;
+    max-width: 400px;
+    width: 90%;
     text-align: center;
-    font-size: 1rem;
-    font-weight: bold;
-    color: #66ffaa;
-    min-height: 30px;
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
+    animation: popIn 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+}
+
+@keyframes popIn {
+    0% {
+        transform: scale(0.9);
+        opacity: 0;
+    }
+
+    100% {
+        transform: scale(1);
+        opacity: 1;
+    }
+}
+
+.modal-content h3 {
+    color: #ffcc00;
+    /* 注意を引くイエロー */
+    margin-top: 0;
     display: flex;
     align-items: center;
     justify-content: center;
+    gap: 10px;
 }
 
-.controls-guide {
-    font-size: 0.7rem;
-    color: #555;
-    line-height: 1.6;
-    margin-top: auto;
+.modal-content p {
+    color: #aaa;
+    font-size: 0.95rem;
+    line-height: 1.5;
+    margin-bottom: 20px;
 }
 
-.controls-guide p {
-    margin: 4px 0;
-    white-space: pre;
-    /* スペースキー表記などで空白維持したい場合 */
+.modal-image-container {
+    background: #fff;
+    border-radius: 8px;
+    padding: 20px;
+    margin: 0 auto 20px auto;
+    width: fit-content;
+    box-shadow: inset 0 2px 10px rgba(0, 0, 0, 0.1);
+}
+
+#modal-cell-image {
+    width: 120px;
+    height: 120px;
+    image-rendering: pixelated;
+    /* 拡大してもぼやけないようにする */
+    display: block;
+    margin: 0 auto;
+    border: 1px dashed #ccc;
+}
+
+.modal-input-group {
+    margin-bottom: 20px;
+}
+
+#modal-digit-input {
+    width: 100%;
+    background: var(--bg-color);
+    color: var(--text-color);
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    padding: 15px;
+    font-size: 2rem;
+    text-align: center;
+    font-family: inherit;
+    font-weight: bold;
+    outline: none;
+    transition: border-color 0.2s;
+}
+
+#modal-digit-input:focus {
+    border-color: var(--accent-color);
+}
+
+#modal-digit-input::-webkit-outer-spin-button,
+#modal-digit-input::-webkit-inner-spin-button {
+    -webkit-appearance: none;
+    margin: 0;
+}
+
+#modal-digit-input[type=number] {
+    -moz-appearance: textfield;
+}
+
+.modal-actions {
+    display: flex;
+    gap: 10px;
+    justify-content: space-between;
+}
+
+.modal-actions .btn {
+    flex: 1;
 }

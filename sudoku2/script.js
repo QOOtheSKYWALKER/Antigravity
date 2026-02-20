@@ -1,639 +1,544 @@
-// ===== 状態管理 =====
+let cvReady = false;
 
-let solution = [];        // 解答盤面
-let board = [];            // 現在の盤面
-let initialBoard = [];     // 初期盤面（リセット用）
-let givenCells = [];       // 初期配置セル（変更不可）
-let memos = [];            // メモデータ（各セルにSet型）
-let selectedRow = 0;       // 選択中のセル行
-let selectedCol = 0;       // 選択中のセル列
-let memoMode = false;      // メモモード
-let currentDifficulty = 'hard';
-let lastInputNumber = 0;   // 直近入力数字（ハイライト用）
-
-// Undo/Redo
-const MAX_HISTORY = 127;   // 履歴の上限
-let undoStack = [];         // Undo用スタック
-let redoStack = [];         // Redo用スタック
-
-// 描画キャッシュ
-let cells = [];             // セルDOM要素のキャッシュ
-let renderPending = false;  // 描画バッチ処理フラグ
-
-// DOM要素
-const boardEl = document.getElementById('board');
-const modeDisplay = document.getElementById('mode-display');
-const messageEl = document.getElementById('message');
-const btnUndo = document.getElementById('btn-undo');
-const btnRedo = document.getElementById('btn-redo');
-
-// ===== パズル生成 =====
-
-function solveSudoku(grid) {
-    for (let row = 0; row < 9; row++) {
-        for (let col = 0; col < 9; col++) {
-            if (grid[row][col] === 0) {
-                const numbers = shuffleArray([1, 2, 3, 4, 5, 6, 7, 8, 9]);
-                for (const num of numbers) {
-                    if (isValid(grid, row, col, num)) {
-                        grid[row][col] = num;
-                        if (solveSudoku(grid)) return true;
-                        grid[row][col] = 0;
-                    }
-                }
-                return false;
-            }
-        }
+// index.html で定義した Module.onRuntimeInitialized から呼ばれる
+function onOpenCvReady() {
+    if (cvReady) return;
+    console.log('onOpenCvReady called');
+    cvReady = true;
+    const cvStatus = document.getElementById('cv-status');
+    if (cvStatus) {
+        cvStatus.textContent = 'OpenCV.js 準備完了';
+        cvStatus.style.color = '#66ffaa';
     }
-    return true;
 }
 
-function isValid(grid, row, col, num) {
-    for (let x = 0; x < 9; x++) {
-        if (grid[row][x] === num) return false;
-    }
-    for (let x = 0; x < 9; x++) {
-        if (grid[x][col] === num) return false;
-    }
-    const br = Math.floor(row / 3) * 3;
-    const bc = Math.floor(col / 3) * 3;
-    for (let r = br; r < br + 3; r++) {
-        for (let c = bc; c < bc + 3; c++) {
-            if (grid[r][c] === num) return false;
-        }
-    }
-    return true;
-}
-
-function shuffleArray(array) {
-    const arr = [...array];
-    for (let i = arr.length - 1; i > 0; i--) {
-        const j = Math.floor(Math.random() * (i + 1));
-        [arr[i], arr[j]] = [arr[j], arr[i]];
-    }
-    return arr;
-}
-
-function countSolutions(grid, limit = 2) {
-    let count = 0;
-    function solve(g) {
-        for (let row = 0; row < 9; row++) {
-            for (let col = 0; col < 9; col++) {
-                if (g[row][col] === 0) {
-                    for (let num = 1; num <= 9; num++) {
-                        if (isValid(g, row, col, num)) {
-                            g[row][col] = num;
-                            solve(g);
-                            if (count >= limit) return;
-                            g[row][col] = 0;
-                        }
-                    }
-                    return;
-                }
-            }
-        }
-        count++;
-    }
-    solve(grid);
-    return count;
-}
-
-function generatePuzzle(difficulty) {
-    const grid = Array.from({ length: 9 }, () => Array(9).fill(0));
-    solveSudoku(grid);
-    solution = grid.map(row => [...row]);
-
-    const removeCounts = { easy: 35, medium: 45, hard: 55 };
-    let toRemove = removeCounts[difficulty] || 55;
-
-    const positions = shuffleArray(
-        Array.from({ length: 81 }, (_, i) => [Math.floor(i / 9), i % 9])
-    );
-
-    for (const [r, c] of positions) {
-        if (toRemove <= 0) break;
-        const backup = grid[r][c];
-        grid[r][c] = 0;
-        const testGrid = grid.map(row => [...row]);
-        if (countSolutions(testGrid) !== 1) {
-            grid[r][c] = backup;
-        } else {
-            toRemove--;
-        }
-    }
-    return grid;
-}
-
-// ===== Undo/Redo =====
-
-/**
- * 現在の状態のスナップショットを作成する
- * メモはArray形式で保存し、Setの生成コストを後回しにする
- */
-function createSnapshot(row, col) {
-    return {
-        board: board.map(r => [...r]),
-        memos: memos.map(r => r.map(s => [...s])),
-        row: row,
-        col: col
-    };
-}
-
-/**
- * 内容変更の前に呼ぶ。現在の状態をUndoスタックに保存する。
- * ナビゲーション（矢印キー）では呼ばない → undoは意味のある操作単位で行われる
- */
-function pushUndo() {
-    undoStack.push(createSnapshot(selectedRow, selectedCol));
-    if (undoStack.length > MAX_HISTORY) undoStack.shift();
-    redoStack = [];
-    updateUndoRedoButtons();
-}
-
-/**
- * 選択セルの内容に応じてハイライト対象を更新する
- * ドキュメント入力完了時以外（移動、Undo、クリアなど）は
- * カーソル下の数字をハイライト、なければハイライト解除
- */
-function updateHighlight() {
-    lastInputNumber = board[selectedRow][selectedCol] !== 0 ? board[selectedRow][selectedCol] : 0;
-}
-
-/**
- * Undo: 直前の状態に戻し、変更があったセルへカーソルを移動する
- */
-function undo() {
-    if (undoStack.length === 0) return;
-    // 現在の状態をRedoスタックへ
-    redoStack.push(createSnapshot(selectedRow, selectedCol));
-    // 復元
-    const snap = undoStack.pop();
-    board = snap.board;
-    memos = snap.memos.map(r => r.map(arr => new Set(arr)));
-    selectedRow = snap.row;
-    selectedCol = snap.col;
-    updateUndoRedoButtons();
-    updateHighlight();
-    scheduleRender();
-}
-
-/**
- * Redo: Undoした操作をやり直し、変更があったセルへカーソルを移動する
- */
-function redo() {
-    if (redoStack.length === 0) return;
-    // 現在の状態をUndoスタックへ
-    undoStack.push(createSnapshot(selectedRow, selectedCol));
-    // 復元
-    const snap = redoStack.pop();
-    board = snap.board;
-    memos = snap.memos.map(r => r.map(arr => new Set(arr)));
-    selectedRow = snap.row;
-    selectedCol = snap.col;
-    updateUndoRedoButtons();
-    updateHighlight();
-    scheduleRender();
-}
-// ...(中略)...
-function clearCell() {
-    if (givenCells[selectedRow][selectedCol]) return;
-    if (board[selectedRow][selectedCol] === 0 && memos[selectedRow][selectedCol].size === 0) return;
-
-    // 変更前の状態を保存
-    pushUndo();
-
-    board[selectedRow][selectedCol] = 0;
-    memos[selectedRow][selectedCol].clear();
-    updateHighlight();
-    scheduleRender();
-}
-// ...(中略)...
-function moveCell(direction) {
-    let row = selectedRow;
-    let col = selectedCol;
-
-    if (direction === 'right') {
-        col++;
-        if (col > 8) { col = 0; row++; }
-        if (row > 8) row = 0;
-    } else if (direction === 'left') {
-        col--;
-        if (col < 0) { col = 8; row--; }
-        if (row < 0) row = 8;
-    } else if (direction === 'down') {
-        row++;
-        if (row > 8) { row = 0; col++; }
-        if (col > 8) col = 0;
-    } else if (direction === 'up') {
-        row--;
-        if (row < 0) { row = 8; col--; }
-        if (col < 0) col = 8;
-    }
-
-    selectedRow = row;
-    selectedCol = col;
-
-    // 自動確定（Sudoku 2 Feature）
-    if (board[row][col] === 0) {
-        tryAutoFill(row, col);
+// ポーリングによるセーフティネット
+function pollForCv() {
+    if (cvReady) return;
+    if (typeof cv !== 'undefined' && cv.Mat) {
+        console.log('OpenCV found via polling');
+        onOpenCvReady();
     } else {
-        updateHighlight();
-        scheduleRender();
+        setTimeout(pollForCv, 500);
     }
 }
+pollForCv();
 
-/**
- * Undo/Redoボタンの有効/無効を更新する
- */
-function updateUndoRedoButtons() {
-    btnUndo.disabled = undoStack.length === 0;
-    btnRedo.disabled = redoStack.length === 0;
+// すでに初期化が完了している（script.jsのロードが後になった）場合のケア
+if (window.cvRuntimeReady) {
+    onOpenCvReady();
 }
 
-/**
- * 盤面を初期状態にリセットする
- */
-function resetBoard() {
-    board = initialBoard.map(r => [...r]);
-    memos = Array.from({ length: 9 }, () =>
-        Array.from({ length: 9 }, () => new Set())
-    );
-    fillAllCandidates();
-    undoStack = [];
-    redoStack = [];
-    lastInputNumber = 0;
-    messageEl.textContent = '';
-    updateUndoRedoButtons();
-    renderBoard();
-}
+const dropZone = document.getElementById('drop-zone');
+const fileInput = document.getElementById('file-input');
+const canvas = document.getElementById('preview-canvas');
+const ctx = canvas.getContext('2d');
 
-// ===== 描画 =====
+const croppedCanvas = document.getElementById('cropped-canvas');
+const croppedCtx = croppedCanvas.getContext('2d');
 
-/**
- * requestAnimationFrameで描画をバッチ処理する
- */
-function scheduleRender() {
-    if (!renderPending) {
-        renderPending = true;
-        requestAnimationFrame(() => {
-            renderPending = false;
-            renderBoard();
-        });
-    }
-}
+const btnAnalyze = document.getElementById('btn-analyze');
+const ocrStatus = document.getElementById('ocr-status');
+const ocrResult = document.getElementById('ocr-result');
+const cellsGrid = document.getElementById('cells-grid');
+const progressFill = document.getElementById('progress-fill');
+const progressBar = document.getElementById('progress-bar');
 
-/**
- * ゲームを初期化する
- */
-function initGame(difficulty) {
-    currentDifficulty = difficulty;
-    messageEl.textContent = '';
+let loadedImage = null;
+let cellCanvases = [];
 
-    const puzzle = generatePuzzle(difficulty);
-    board = puzzle.map(r => [...r]);
-    initialBoard = puzzle.map(r => [...r]);
-    givenCells = puzzle.map(r => r.map(v => v !== 0));
-    memos = Array.from({ length: 9 }, () =>
-        Array.from({ length: 9 }, () => new Set())
-    );
-
-    // 空白セルに候補をすべて埋める (Sudoku 2 Feature)
-    fillAllCandidates();
-
-    selectedRow = 0;
-    selectedCol = 0;
-    lastInputNumber = 0;
-    undoStack = [];
-    redoStack = [];
-
-    buildBoard();
-    renderBoard();
-    updateUndoRedoButtons();
-}
-
-/**
- * 空白セルに入り得るすべての数字をメモに追加する
- */
-function fillAllCandidates() {
+// DOM構築時に81個の小Canvasを作っておく
+function initCellsGrid() {
+    cellsGrid.innerHTML = '';
+    cellCanvases = [];
     for (let r = 0; r < 9; r++) {
         for (let c = 0; c < 9; c++) {
-            if (board[r][c] === 0) {
-                const candidates = new Set();
-                for (let num = 1; num <= 9; num++) {
-                    if (!hasConflict(r, c, num)) {
-                        candidates.add(num);
-                    }
-                }
-                memos[r][c] = candidates;
-            }
+            const cellCanvas = document.createElement('canvas');
+            // 解像度は後で設定するが、見た目はCSSで制御
+            cellsGrid.appendChild(cellCanvas);
+            cellCanvases.push(cellCanvas);
         }
     }
 }
+initCellsGrid();
 
-/**
- * 自動確定を試みる
- * 1. Naked Single: 候補が1つだけなら確定
- * 2. Hidden Single: 行・列・ブロック内で唯一の候補なら確定
- */
-function tryAutoFill(row, col) {
-    // 既に数字が入っている場合は何もしない
-    if (board[row][col] !== 0) {
-        updateHighlight();
-        scheduleRender();
+// ===== Drag & Drop Logic =====
+
+dropZone.addEventListener('dragover', (e) => {
+    e.preventDefault();
+    dropZone.classList.add('dragover');
+});
+
+dropZone.addEventListener('dragleave', (e) => {
+    e.preventDefault();
+    dropZone.classList.remove('dragover');
+});
+
+dropZone.addEventListener('drop', (e) => {
+    e.preventDefault();
+    dropZone.classList.remove('dragover');
+    if (e.dataTransfer.files.length > 0) {
+        handleImage(e.dataTransfer.files[0]);
+    }
+});
+
+fileInput.addEventListener('change', (e) => {
+    if (e.target.files.length > 0) {
+        handleImage(e.target.files[0]);
+    }
+});
+
+function handleImage(file) {
+    if (!cvReady) {
+        alert('OpenCV.js の読み込みを待っています...');
+        return;
+    }
+    if (!file.type.startsWith('image/')) {
+        alert('画像ファイルを選択してください。');
         return;
     }
 
-    const memo = memos[row][col];
+    const reader = new FileReader();
+    reader.onload = (e) => {
+        const img = new Image();
+        img.onload = () => {
+            loadedImage = img;
 
-    // 1. Naked Single
-    if (memo.size === 1) {
-        const num = [...memo][0];
-        inputNumber(num, true);
-        return;
-    }
+            // オリジナルキャンバスに描画（最大幅でリサイズ）
+            const maxW = 1000;
+            const maxH = 1000;
+            let finalW = img.width;
+            let finalH = img.height;
 
-    // 2. Hidden Single
-    for (const num of memo) {
-        if (checkHiddenSingle(row, col, num)) {
-            inputNumber(num, true);
-            return;
-        }
-    }
-
-    // 確定できなかった場合
-    updateHighlight();
-    scheduleRender();
-}
-
-/**
- * 指定した数字が、その行・列・ブロック内で唯一このセルにしか候補がないか判定
- */
-function checkHiddenSingle(row, col, num) {
-    // 行チェック
-    let foundInRow = false;
-    for (let c = 0; c < 9; c++) {
-        if (c !== col && board[row][c] === 0 && memos[row][c].has(num)) {
-            foundInRow = true;
-            break;
-        }
-    }
-    if (!foundInRow) return true;
-
-    // 列チェック
-    let foundInCol = false;
-    for (let r = 0; r < 9; r++) {
-        if (r !== row && board[r][col] === 0 && memos[r][col].has(num)) {
-            foundInCol = true;
-            break;
-        }
-    }
-    if (!foundInCol) return true;
-
-    // ブロックチェック
-    let foundInBlock = false;
-    const br = Math.floor(row / 3) * 3;
-    const bc = Math.floor(col / 3) * 3;
-    for (let r = br; r < br + 3; r++) {
-        for (let c = bc; c < bc + 3; c++) {
-            if ((r !== row || c !== col) && board[r][c] === 0 && memos[r][c].has(num)) {
-                foundInBlock = true;
-                break;
-            }
-        }
-    }
-    if (!foundInBlock) return true;
-
-    return false;
-}
-
-/**
- * DOM要素を構築する（initGame時に1回だけ）
- */
-function buildBoard() {
-    boardEl.innerHTML = '';
-    cells = [];
-
-    for (let row = 0; row < 9; row++) {
-        cells[row] = [];
-        for (let col = 0; col < 9; col++) {
-            const cell = document.createElement('div');
-            cell.className = 'cell';
-
-            if (col % 3 === 2 && col !== 8) cell.classList.add('border-right');
-            if (row % 3 === 2 && row !== 8) cell.classList.add('border-bottom');
-
-            cell.addEventListener('click', ((r, c) => () => {
-                selectedRow = r;
-                selectedCol = c;
-                // 自動確定 (Sudoku 2 Feature)
-                tryAutoFill(r, c);
-            })(row, col));
-
-            cells[row][col] = cell;
-            boardEl.appendChild(cell);
-        }
-    }
-}
-
-/**
- * 盤面の表示を更新する（DOM要素は再利用、中身だけ更新）
- */
-function renderBoard() {
-    const selectedVal = board[selectedRow][selectedCol];
-    const targetNumber = selectedVal !== 0 ? selectedVal : lastInputNumber;
-    const selBoxRow = Math.floor(selectedRow / 3);
-    const selBoxCol = Math.floor(selectedCol / 3);
-
-    for (let row = 0; row < 9; row++) {
-        for (let col = 0; col < 9; col++) {
-            const cell = cells[row][col];
-            const value = board[row][col];
-
-            // クラスを文字列で一括設定（classList操作より高速）
-            let cls = 'cell';
-            if (col % 3 === 2 && col !== 8) cls += ' border-right';
-            if (row % 3 === 2 && row !== 8) cls += ' border-bottom';
-            if (givenCells[row][col]) cls += ' given';
-
-            if (row === selectedRow && col === selectedCol) {
-                cls += ' selected';
-            } else if (row === selectedRow || col === selectedCol ||
-                (Math.floor(row / 3) === selBoxRow && Math.floor(col / 3) === selBoxCol)) {
-                cls += ' highlighted';
+            if (finalW > maxW || finalH > maxH) {
+                const ratio = Math.min(maxW / finalW, maxH / finalH);
+                finalW = finalW * ratio;
+                finalH = finalH * ratio;
             }
 
-            if (value !== 0 && targetNumber !== 0 && value === targetNumber &&
-                !(row === selectedRow && col === selectedCol)) {
-                cls += ' same-number';
-            }
+            canvas.width = finalW;
+            canvas.height = finalH;
+            ctx.drawImage(img, 0, 0, finalW, finalH);
 
-            if (value !== 0 && !givenCells[row][col] && hasConflict(row, col, value)) {
-                cls += ' error';
-            }
+            ocrStatus.textContent = '画像がロードされました。解析待ち。';
+            ocrResult.textContent = '';
+            btnAnalyze.disabled = false;
 
-            cell.className = cls;
-
-            // セル内容の更新
-            if (value !== 0) {
-                if (cell.childElementCount > 0 || cell.textContent !== String(value)) {
-                    cell.textContent = value;
-                }
-            } else if (memos[row][col].size > 0) {
-                cell.textContent = '';
-                const memoGrid = document.createElement('div');
-                memoGrid.className = 'memo-grid';
-                for (let n = 1; n <= 9; n++) {
-                    const span = document.createElement('span');
-                    if (memos[row][col].has(n)) {
-                        span.textContent = n;
-                        if (targetNumber !== 0 && n === targetNumber) {
-                            span.classList.add('memo-highlight');
-                        }
-                    }
-                    memoGrid.appendChild(span);
-                }
-                cell.appendChild(memoGrid);
-            } else {
-                if (cell.textContent !== '' || cell.childElementCount > 0) {
-                    cell.textContent = '';
-                }
-            }
-        }
-    }
+            // OpenCVで前処理＆クロップを実行
+            processImageWithOpenCV();
+        };
+        img.src = e.target.result;
+    };
+    reader.readAsDataURL(file);
 }
 
-// ===== ルールチェック =====
+// ===== OpenCV.js Logic (Phase 2) =====
 
-function hasConflict(row, col, num) {
-    for (let x = 0; x < 9; x++) {
-        if (x !== col && board[row][x] === num) return true;
-    }
-    for (let x = 0; x < 9; x++) {
-        if (x !== row && board[x][col] === num) return true;
-    }
-    const br = Math.floor(row / 3) * 3;
-    const bc = Math.floor(col / 3) * 3;
-    for (let r = br; r < br + 3; r++) {
-        for (let c = bc; c < bc + 3; c++) {
-            if (!(r === row && c === col) && board[r][c] === num) return true;
+function processImageWithOpenCV() {
+    document.getElementById('cv-status').textContent = '画像解析中 (モルフォロジー演算)...';
+
+    // Canvasから画像をMatとして読み込む
+    let src = cv.imread(canvas);
+    let gray = new cv.Mat();
+    let blur = new cv.Mat();
+
+    // グレースケール化
+    cv.cvtColor(src, gray, cv.COLOR_RGBA2GRAY, 0);
+
+    // ノイズ除去
+    cv.GaussianBlur(gray, blur, new cv.Size(5, 5), 0, 0, cv.BORDER_DEFAULT);
+
+    // 1. 適応的2値化（反転）
+    // 局所的な明るさの差を拾うため、ダークモードの暗い枠線も白く浮き上がる。
+    let thresh = new cv.Mat();
+    cv.adaptiveThreshold(blur, thresh, 255, cv.ADAPTIVE_THRESH_GAUSSIAN_C, cv.THRESH_BINARY_INV, 11, 2);
+
+    // 2. モルフォロジー演算によるライン抽出
+    let horizontal = thresh.clone();
+    let vertical = thresh.clone();
+
+    // 水平ラインの抽出（横長のカーネル）
+    let scale = 20; // 盤面サイズの1/20程度の線を拾う
+    let horizontalSize = Math.floor(horizontal.cols / scale);
+    let horizontalStructure = cv.getStructuringElement(cv.MORPH_RECT, new cv.Size(horizontalSize, 1));
+    cv.erode(horizontal, horizontal, horizontalStructure);
+    cv.dilate(horizontal, horizontal, horizontalStructure);
+
+    // 垂直ラインの抽出（縦長のカーネル）
+    let verticalSize = Math.floor(vertical.rows / scale);
+    let verticalStructure = cv.getStructuringElement(cv.MORPH_RECT, new cv.Size(1, verticalSize));
+    cv.erode(vertical, vertical, verticalStructure);
+    cv.dilate(vertical, vertical, verticalStructure);
+
+    // 3. マスクの合成（水平 + 垂直）
+    let mask = new cv.Mat();
+    cv.add(horizontal, vertical, mask);
+
+    // 4. 輪郭抽出
+    let contours = new cv.MatVector();
+    let hierarchy = new cv.Mat();
+    cv.findContours(mask, contours, hierarchy, cv.RETR_EXTERNAL, cv.CHAIN_APPROX_SIMPLE);
+
+    let maxArea = 0;
+    let maxRect = null;
+
+    for (let i = 0; i < contours.size(); ++i) {
+        let cnt = contours.get(i);
+        let rect = cv.boundingRect(cnt);
+        let area = rect.width * rect.height;
+        let aspect = rect.width / rect.height;
+
+        // アスペクト比がほぼ1:1かつ十分な面積を持つものを探す
+        if (aspect > 0.8 && aspect < 1.2 && area > maxArea) {
+            maxArea = area;
+            maxRect = rect;
         }
     }
-    return false;
-}
 
-function checkWin() {
-    for (let row = 0; row < 9; row++) {
-        for (let col = 0; col < 9; col++) {
-            if (board[row][col] !== solution[row][col]) return false;
+    if (maxRect && maxArea > 10000) {
+        document.getElementById('cv-status').textContent = '数独の枠を検出（高精度モード）！';
+        document.getElementById('cv-status').style.color = '#66ffaa';
+
+        // 枠線に切り抜く
+        let cropped = src.roi(maxRect);
+
+        // プレビューの描画
+        cv.imshow('cropped-canvas', cropped);
+
+        // ダークモードかライトモードかの全体判定
+        // クロップされた画像（数独全体）の中央付近のピクセルを見て判断する
+        // 中央マス（4,4）のさらに中心点
+        let centerX = Math.floor(cropped.cols / 2);
+        let centerY = Math.floor(cropped.rows / 2);
+        // グレースケールで判定するために一時的に変換
+        let grayCropped = new cv.Mat();
+        cv.cvtColor(cropped, grayCropped, cv.COLOR_RGBA2GRAY, 0);
+        let centerIntensity = grayCropped.ucharPtr(centerY, centerX)[0];
+        // 背景が暗い（< 128）ならダークモードと判定
+        let isDarkMode = centerIntensity < 128;
+        grayCropped.delete();
+
+        if (isDarkMode) {
+            document.getElementById('cv-status').textContent += ' (ダークモード検出)';
         }
-    }
-    return true;
-}
 
-// ===== 入力処理 =====
-
-function inputNumber(num, forceInput = false) {
-    if (givenCells[selectedRow][selectedCol]) return;
-
-    // 変更前の状態を保存
-    pushUndo();
-
-    if (memoMode && !forceInput) {
-        if (board[selectedRow][selectedCol] !== 0) return;
-        const memo = memos[selectedRow][selectedCol];
-        if (memo.has(num)) {
-            memo.delete(num);
-        } else {
-            memo.add(num);
-        }
+        // 81分割処理
+        sliceIntoGrid(cropped, isDarkMode);
+        cropped.delete();
     } else {
-        board[selectedRow][selectedCol] = num;
-        memos[selectedRow][selectedCol].clear();
-        if (!hasConflict(selectedRow, selectedCol, num)) {
-            clearRelatedMemos(selectedRow, selectedCol, num);
-        }
+        document.getElementById('cv-status').textContent = '枠の特定に失敗。全体を解析します。';
+        document.getElementById('cv-status').style.color = '#ffcc00';
+        cv.imshow('cropped-canvas', src);
+
+        // 全体判定のフォールバック
+        let graySrc = new cv.Mat();
+        cv.cvtColor(src, graySrc, cv.COLOR_RGBA2GRAY, 0);
+        let centerIntensity = graySrc.ucharPtr(Math.floor(src.rows / 2), Math.floor(src.cols / 2))[0];
+        let isDarkMode = centerIntensity < 128;
+        graySrc.delete();
+
+        sliceIntoGrid(src, isDarkMode);
     }
 
-    lastInputNumber = num;
-    scheduleRender();
-
-    if ((!memoMode || forceInput) && checkWin()) {
-        messageEl.textContent = '🎉 クリア！';
-    }
+    // メモリ解放
+    src.delete(); gray.delete(); blur.delete(); thresh.delete();
+    horizontal.delete(); vertical.delete(); mask.delete();
+    horizontalStructure.delete(); verticalStructure.delete();
+    contours.delete(); hierarchy.delete();
 }
 
-function clearRelatedMemos(row, col, num) {
-    for (let c = 0; c < 9; c++) {
-        if (c !== col) memos[row][c].delete(num);
-    }
+function sliceIntoGrid(cvMat, isDarkMode) {
+    const width = cvMat.cols;
+    const height = cvMat.rows;
+
+    const cellW = width / 9;
+    const cellH = height / 9;
+
+    // 各マスの内側を削る量を調整。ダイナミックな補正を行うため少し余裕を持たせる
+    const marginW = cellW * 0.03;
+    const marginH = cellH * 0.03;
+
     for (let r = 0; r < 9; r++) {
-        if (r !== row) memos[r][col].delete(num);
-    }
-    const br = Math.floor(row / 3) * 3;
-    const bc = Math.floor(col / 3) * 3;
-    for (let r = br; r < br + 3; r++) {
-        for (let c = bc; c < bc + 3; c++) {
-            if (r !== row || c !== col) memos[r][c].delete(num);
+        for (let c = 0; c < 9; c++) {
+            let x = Math.floor(c * cellW + marginW);
+            let y = Math.floor(r * cellH + marginH);
+            let w = Math.floor(cellW - marginW * 2);
+            let h = Math.floor(cellH - marginH * 2);
+
+            let rect = new cv.Rect(x, y, w, h);
+            let cellMat = cvMat.roi(rect);
+
+            // セルの動的な前処理（境界除去・中央寄せ）
+            let result = preprocessCell(cellMat, isDarkMode);
+
+            const cellCanvas = cellCanvases[r * 9 + c];
+            cv.imshow(cellCanvas, result.mat);
+
+            // 後でOCR判定時に「このマスには文字があるはず」と分かるようにマークしておく
+            cellCanvas.dataset.hasDigit = result.hasDigit ? 'true' : 'false';
+
+            cellMat.delete();
+            result.mat.delete();
         }
     }
 }
 
-function toggleMemoMode() {
-    memoMode = !memoMode;
-    modeDisplay.textContent = memoMode ? 'メモモード' : '入力モード';
-    modeDisplay.className = memoMode ? 'mode-display memo-on' : 'mode-display';
+/**
+ * セル内の数字を孤立化させ、中央に配置する前処理
+ * @param {cv.Mat} cellMat 
+ * @param {boolean} isDarkMode 画像全体がダークモードかどうか
+ * @returns {{mat: cv.Mat, hasDigit: boolean}} 白背景に黒文字で中央寄せされたMatと、文字が存在するかのフラグ
+ */
+function preprocessCell(cellMat, isDarkMode) {
+    let gray = new cv.Mat();
+    cv.cvtColor(cellMat, gray, cv.COLOR_RGBA2GRAY, 0);
+
+    // 適応的2値化（反転：文字を白=255、背景を黒=0にする）
+    // 初期状態のクリーンな盤面（ハイライトやメモがない状態）を前提とするため、
+    // 背景と文字の2極ヒストグラムに最適な大津の2値化を使用。
+    let thresh = new cv.Mat();
+    if (isDarkMode) {
+        // ダークモードの場合、元画像の白文字が明るい。Otsuで文字が白(255)、背景が黒(0)になるよう閾値決め
+        cv.threshold(gray, thresh, 0, 255, cv.THRESH_BINARY | cv.THRESH_OTSU);
+    } else {
+        // ライトモードの場合、元画像の黒文字が暗い。反転して文字が白(255)、背景が黒(0)になるよう閾値決め
+        cv.threshold(gray, thresh, 0, 255, cv.THRESH_BINARY_INV | cv.THRESH_OTSU);
+    }
+
+    // 境界除去: 外枠に触れているピクセルを消去
+    // 連結成分（Connected Components）を抽出
+    let labels = new cv.Mat();
+    let stats = new cv.Mat();
+    let centroids = new cv.Mat();
+    let nLabels = cv.connectedComponentsWithStats(thresh, labels, stats, centroids);
+
+    let maxArea = 0;
+    let bestRect = null;
+
+    // 背景(label 0)を除外してループ
+    for (let i = 1; i < nLabels; i++) {
+        let left = stats.intAt(i, cv.CC_STAT_LEFT);
+        let top = stats.intAt(i, cv.CC_STAT_TOP);
+        let width = stats.intAt(i, cv.CC_STAT_WIDTH);
+        let height = stats.intAt(i, cv.CC_STAT_HEIGHT);
+        let area = stats.intAt(i, cv.CC_STAT_AREA);
+
+        // 境界に触れているか判定（1px余裕を持たせる）
+        let isTouchingBorder = (left <= 1 || top <= 1 || (left + width) >= thresh.cols - 1 || (top + height) >= thresh.rows - 1);
+
+        if (!isTouchingBorder) {
+            // 最も大きい「浮いている」塊を数字とみなす
+            if (area > maxArea) {
+                maxArea = area;
+                bestRect = new cv.Rect(left, top, width, height);
+            }
+        }
+    }
+
+    // 出力用のキャンバス（白背景）を作成
+    let output = new cv.Mat.ones(thresh.rows, thresh.cols, cv.CV_8UC1);
+    output.setTo(new cv.Scalar(255)); // 白で埋める
+
+    let hasDigit = false;
+
+    // 数字が見つかった場合、中央に配置（面積0.5%以上。ノイズ除去）
+    if (bestRect && maxArea > (thresh.rows * thresh.cols * 0.005)) {
+        hasDigit = true; // 確実な塊が存在する
+
+        // otsuによって背景ノイズは消え、数字だけがくっきりと残っている。
+        // threshは「文字が白(255)、背景が黒(0)」の状態。
+        let digitROI = thresh.roi(bestRect);
+
+        // 配置先の座標計算（中央）
+        let targetX = Math.floor((output.cols - bestRect.width) / 2);
+        let targetY = Math.floor((output.rows - bestRect.height) / 2);
+        let targetRect = new cv.Rect(targetX, targetY, bestRect.width, bestRect.height);
+
+        let processedDigit = new cv.Mat();
+
+        // 出力はTesseract.jsが最も読みやすい「白背景(255)に黒文字(0)」に統一するため、反転させる
+        cv.bitwise_not(digitROI, processedDigit);
+
+        // 白背景に出力
+        processedDigit.copyTo(output.roi(targetRect));
+
+        processedDigit.delete();
+        digitROI.delete();
+    }
+
+    // メモリ解放
+    gray.delete(); thresh.delete(); labels.delete(); stats.delete(); centroids.delete();
+
+    return { mat: output, hasDigit: hasDigit };
 }
 
+// ===== Interactive OCR Error Correction Modal Logic =====
+function showModalPrompt(canvas) {
+    return new Promise((resolve) => {
+        const modal = document.getElementById('ocr-correction-modal');
+        const img = document.getElementById('modal-cell-image');
+        const input = document.getElementById('modal-digit-input');
+        const btnSubmit = document.getElementById('modal-btn-submit');
+        const btnSkip = document.getElementById('modal-btn-skip');
 
+        // キャンバスの画像をimgタグに転写
+        img.src = canvas.toDataURL('image/png');
+        input.value = ''; // リセット
 
-// ===== キーボード操作 =====
+        modal.style.display = 'flex';
+        input.focus();
 
-document.addEventListener('keydown', (e) => {
-    // Undo: Ctrl+Z / Cmd+Z
-    if ((e.ctrlKey || e.metaKey) && !e.shiftKey && e.key === 'z') {
-        e.preventDefault();
-        undo();
-        return;
-    }
-    // Redo: Ctrl+Y / Cmd+Y / Ctrl+Shift+Z / Cmd+Shift+Z
-    if ((e.ctrlKey || e.metaKey) && (e.key === 'y' || (e.shiftKey && e.key === 'z'))) {
-        e.preventDefault();
-        redo();
-        return;
-    }
+        const cleanupAndResolve = (value) => {
+            modal.style.display = 'none';
+            btnSubmit.removeEventListener('click', onSubmit);
+            btnSkip.removeEventListener('click', onSkip);
+            input.removeEventListener('keydown', onKeydown);
+            resolve(value);
+        };
 
-    if (e.key === 'ArrowUp') { e.preventDefault(); moveCell('up'); }
-    else if (e.key === 'ArrowDown') { e.preventDefault(); moveCell('down'); }
-    else if (e.key === 'ArrowLeft') { e.preventDefault(); moveCell('left'); }
-    else if (e.key === 'ArrowRight') { e.preventDefault(); moveCell('right'); }
-    else if (e.key >= '1' && e.key <= '9') { inputNumber(parseInt(e.key)); }
-    else if (e.key === 'Delete' || e.key === 'Backspace') { e.preventDefault(); clearCell(); }
-    else if (e.code === 'Space' || e.key === 'm' || e.key === 'M') { e.preventDefault(); toggleMemoMode(); }
-});
+        const onSubmit = () => {
+            const val = parseInt(input.value);
+            if (!isNaN(val) && val >= 1 && val <= 9) {
+                cleanupAndResolve(val);
+            } else {
+                // 入力が不正な場合はハイライトなどで知らせる（今回は簡易的に弾くのみ）
+                input.focus();
+            }
+        };
 
-// ===== ボタンイベント =====
+        const onSkip = () => {
+            cleanupAndResolve(0);
+        };
 
-document.querySelectorAll('.diff-btn').forEach(btn => {
-    btn.addEventListener('click', () => {
-        document.querySelectorAll('.diff-btn').forEach(b => b.classList.remove('active'));
-        btn.classList.add('active');
-        initGame(btn.dataset.level);
+        const onKeydown = (e) => {
+            if (e.key === 'Enter') {
+                onSubmit();
+            } else if (e.key === 'Escape') {
+                onSkip();
+            }
+        };
+
+        btnSubmit.addEventListener('click', onSubmit);
+        btnSkip.addEventListener('click', onSkip);
+        input.addEventListener('keydown', onKeydown);
     });
-});
+}
 
-document.getElementById('btn-new').addEventListener('click', () => {
-    initGame(currentDifficulty);
-});
+// ===== Tesseract.js Individual Cell OCR Logic =====
 
-document.getElementById('btn-reset').addEventListener('click', () => {
-    if (confirm('本当に最初の状態に戻しますか？\n入力した数字やメモはすべて消去されます。')) {
-        resetBoard();
+btnAnalyze.addEventListener('click', async () => {
+    btnAnalyze.disabled = true;
+    ocrStatus.style.color = '#ffcc00';
+    ocrStatus.textContent = 'Tesseract.js OCRエンジンをロード中...';
+    progressBar.style.display = 'block';
+    progressFill.style.width = '0%';
+    ocrResult.textContent = '解析開始...';
+
+    const gridResult = [];
+    const manualCorrectionCache = []; // { mat: cv.Mat, digit: number } の配列を保持して、記憶機能を実装
+
+    try {
+        const worker = await Tesseract.createWorker('eng');
+        await worker.setParameters({
+            tessedit_char_whitelist: '0123456789',
+            tessedit_pageseg_mode: Tesseract.PSM.SINGLE_CHAR // 1文字モード
+        });
+
+        ocrStatus.textContent = '81マスを個別に解析中...';
+
+        for (let i = 0; i < 81; i++) {
+            const canvas = cellCanvases[i];
+            const definitelyHasDigit = canvas.dataset.hasDigit === 'true';
+
+            // ピクセルデータを取得して空白マス（0）を早めに判定する簡易ロジック
+            // OpenCVで完全に2値化してから判定するのが理想だが、今回はTesseractの文字認識結果に頼るアプローチも並行
+
+            const ret = await worker.recognize(canvas);
+            const text = ret.data.text.trim();
+
+            // 数字が検出できなければ 0、あればその数字
+            let num = text.length > 0 && !isNaN(parseInt(text)) ? parseInt(text) : 0;
+
+            // ヒューマン・イン・ザ・ループ（UI対話的エラー修正 ＋ 「記憶」機能）
+            if (definitelyHasDigit && num === 0) {
+                // セルをハイライト
+                canvas.style.border = '3px solid #ff0000';
+
+                // 1. まず過去のキャッシュ（記憶）から似た画像を探す
+                let matchedNumber = null;
+                if (manualCorrectionCache.length > 0) {
+                    // 現在のキャンバスを OpenCV Mat に変換
+                    let currentMat = cv.imread(canvas);
+                    cv.cvtColor(currentMat, currentMat, cv.COLOR_RGBA2GRAY, 0);
+
+                    for (const cache of manualCorrectionCache) {
+                        let result = new cv.Mat();
+                        // テンプレートマッチング実行
+                        cv.matchTemplate(currentMat, cache.mat, result, cv.TM_CCOEFF_NORMED);
+                        let minMax = cv.minMaxLoc(result);
+
+                        // 類似度が95%を超えていれば「同じ文字」とみなす
+                        if (minMax.maxVal > 0.95) {
+                            matchedNumber = cache.digit;
+                            console.log(`Matched cached digit ${matchedNumber} with confidence ${minMax.maxVal}`);
+                            result.delete();
+                            break;
+                        }
+                        result.delete();
+                    }
+                    currentMat.delete();
+                }
+
+                if (matchedNumber !== null) {
+                    // キャッシュと一致した場合は、人間に聞かずに自動入力
+                    num = matchedNumber;
+                } else {
+                    // 2. キャッシュにない場合は人間に聞く（モーダル表示）
+                    num = await showModalPrompt(canvas);
+
+                    // 3. ユーザーが入力した数字（スキップの0以外）を画像と共にキャッシュに保存
+                    if (num !== 0) {
+                        let cacheMat = cv.imread(canvas);
+                        cv.cvtColor(cacheMat, cacheMat, cv.COLOR_RGBA2GRAY, 0);
+                        manualCorrectionCache.push({ mat: cacheMat, digit: num });
+                    }
+                }
+
+                // ハイライト解除
+                canvas.style.border = '1px solid #444';
+            }
+
+            gridResult.push(num);
+
+            // UIアップデート
+            progressFill.style.width = `${Math.round(((i + 1) / 81) * 100)}%`;
+
+            // コンソール出力
+            if (i % 9 === 8) {
+                console.log(gridResult.slice(i - 8, i + 1));
+            }
+        }
+
+        ocrStatus.style.color = '#66ffaa';
+        ocrStatus.textContent = `解析完了！`;
+
+        // 配列を見やすくフォーマットして出力
+        let outputText = '[\n';
+        for (let r = 0; r < 9; r++) {
+            outputText += '  [' + gridResult.slice(r * 9, r * 9 + 9).join(', ') + '],\n';
+        }
+        outputText += ']';
+
+        ocrResult.textContent = outputText;
+
+        await worker.terminate();
+
+    } catch (error) {
+        console.error("OCR Error:", error);
+        ocrStatus.style.color = '#ff6b6b';
+        ocrStatus.textContent = 'エラーが発生しました';
+        ocrResult.textContent = error.message;
+    } finally {
+        btnAnalyze.disabled = false;
     }
 });
-
-btnUndo.addEventListener('click', () => undo());
-btnRedo.addEventListener('click', () => redo());
-
-// ===== ゲーム開始 =====
-
-initGame('hard');

@@ -26,6 +26,22 @@ const translations = {
         resetConfirmTitle: '確認',
         yes: 'はい',
         no: 'いいえ',
+        importOcr: '📷 取込',
+        ocrTitle: '📷 画像から盤面を読み込む',
+        ocrDropText: 'ここに数独の画像（スクショ等）をドラッグ＆ドロップ',
+        ocrClickText: 'またはクリックしてファイルを選択',
+        ocrAnalyzeBtn: '解析開始 (OCR)',
+        ocrStatusLoaded: '画像がロードされました。解析を開始してください。',
+        ocrStatusLoading: 'Tesseract.js OCRエンジンをロード中...',
+        ocrStatusExtracting: '81マスを個別に解析中...',
+        ocrStatusSuccess: '解析完了！',
+        ocrStatusError: '画像処理または解析中にエラーが発生しました。',
+        ocrCorrectionTitle: '認識エラー',
+        ocrCorrectionDesc: 'このマスの数字は何ですか？',
+        ocrCorrectionSubmit: '確定 (Enter)',
+        ocrCorrectionSkip: '空マスにする (Esc)',
+        ocrInvalidBoard: '認識された盤面が不正か、唯一解を持ちません。手動で修正してください。',
+        ocrValidBoard: '✅ 解析成功！'
     },
     en: {
         reset: 'Reset',
@@ -52,6 +68,22 @@ const translations = {
         resetConfirmTitle: 'Confirm',
         yes: 'Yes',
         no: 'No',
+        importOcr: '📷 Scan',
+        ocrTitle: '📷 Load Board from Image',
+        ocrDropText: 'Drag & Drop a Sudoku image (screenshot) here',
+        ocrClickText: 'or click to select a file',
+        ocrAnalyzeBtn: 'Start Analysis (OCR)',
+        ocrStatusLoaded: 'Image loaded. Waiting for analysis.',
+        ocrStatusLoading: 'Loading Tesseract.js OCR engine...',
+        ocrStatusExtracting: 'Analyzing 81 cells individually...',
+        ocrStatusSuccess: 'Analysis Complete!',
+        ocrStatusError: 'An error occurred during image processing or analysis.',
+        ocrCorrectionTitle: 'Recognition Error',
+        ocrCorrectionDesc: 'What is the number in this cell?',
+        ocrCorrectionSubmit: 'Submit (Enter)',
+        ocrCorrectionSkip: 'Leave Empty (Esc)',
+        ocrInvalidBoard: 'The recognized board is invalid or has no unique solution. Please correct manually.',
+        ocrValidBoard: '✅ Analysis Successful!'
     }
 };
 
@@ -812,3 +844,494 @@ btnRedo.addEventListener('click', () => redo());
 
 buildBoard();
 initGame('hard');
+
+// ============================================================================
+// OCR Module Integration (Ported from sudoku2)
+// ============================================================================
+
+const btnOcrOpen = document.getElementById('btn-ocr-open');
+const btnOcrClose = document.getElementById('btn-ocr-close');
+const ocrModal = document.getElementById('ocr-main-modal');
+
+const uploadZone = document.getElementById('upload-zone');
+const fileInput = document.getElementById('file-input');
+const mainCanvas = document.getElementById('main-canvas');
+const cellsContainer = document.getElementById('cells-container');
+const btnAnalyze = document.getElementById('btn-analyze');
+const ocrResult = document.getElementById('ocr-result');
+const ocrStatus = document.getElementById('ocr-status');
+const progressBar = document.getElementById('ocr-progress-bar');
+const progressFill = document.getElementById('ocr-progress-fill');
+
+let uploadedImage = null;
+let cellCanvases = [];
+let manualCorrectionCache = [];
+
+// OCRモーダルの開閉
+btnOcrOpen.addEventListener('click', () => {
+    ocrModal.style.display = 'flex';
+    document.getElementById('ocr-main-modal').querySelector('h2').textContent = t('ocrTitle');
+    uploadZone.querySelectorAll('p')[0].textContent = t('ocrDropText');
+    uploadZone.querySelectorAll('p')[1].textContent = t('ocrClickText');
+    btnAnalyze.textContent = t('ocrAnalyzeBtn');
+    if (!uploadedImage) {
+        ocrStatus.textContent = '';
+    } else {
+        ocrStatus.textContent = t('ocrStatusLoaded');
+    }
+
+    // Document elements for the correction modal
+    document.querySelector('.ocr-correction-box h3').textContent = t('ocrCorrectionTitle');
+    document.querySelector('.ocr-correction-box p').textContent = t('ocrCorrectionDesc');
+    document.getElementById('modal-btn-submit').textContent = t('ocrCorrectionSubmit');
+    document.getElementById('modal-btn-skip').textContent = t('ocrCorrectionSkip');
+});
+
+btnOcrClose.addEventListener('click', () => {
+    ocrModal.style.display = 'none';
+});
+
+// ファイル読み込み処理
+function handleFile(file) {
+    if (!file.type.startsWith('image/')) {
+        alert('画像ファイルを選択してください。');
+        return;
+    }
+
+    const reader = new FileReader();
+    reader.onload = (e) => {
+        const img = new Image();
+        img.onload = () => {
+            uploadedImage = img;
+
+            // キャンバスに全体画像を描画
+            const ctx = mainCanvas.getContext('2d');
+            mainCanvas.width = img.width;
+            mainCanvas.height = img.height;
+            ctx.drawImage(img, 0, 0);
+
+            btnAnalyze.disabled = false;
+            ocrStatus.textContent = t('ocrStatusLoaded');
+            ocrResult.textContent = '';
+            progressBar.style.display = 'none';
+            cellsContainer.innerHTML = '';
+            cellCanvases = [];
+            manualCorrectionCache = [];
+        };
+        img.src = e.target.result;
+    };
+    reader.readAsDataURL(file);
+}
+
+// イベントリスナー（アップロード関連）
+uploadZone.addEventListener('dragover', (e) => {
+    e.preventDefault();
+    uploadZone.classList.add('dragover');
+});
+
+uploadZone.addEventListener('dragleave', () => {
+    uploadZone.classList.remove('dragover');
+});
+
+uploadZone.addEventListener('drop', (e) => {
+    e.preventDefault();
+    uploadZone.classList.remove('dragover');
+    if (e.dataTransfer.files.length > 0) {
+        handleFile(e.dataTransfer.files[0]);
+    }
+});
+
+uploadZone.addEventListener('click', () => {
+    fileInput.click();
+});
+
+fileInput.addEventListener('change', (e) => {
+    if (e.target.files.length > 0) {
+        handleFile(e.target.files[0]);
+    }
+});
+
+/**
+ * 画像の前処理と81分割（OpenCV.js使用）
+ */
+function processImageWithOpenCV() {
+    return new Promise((resolve, reject) => {
+        try {
+            let src = cv.imread(mainCanvas);
+            let gray = new cv.Mat();
+            cv.cvtColor(src, gray, cv.COLOR_RGBA2GRAY, 0);
+
+            let isDarkMode = false;
+            let meanVal = cv.mean(gray);
+            if (meanVal[0] < 128) {
+                isDarkMode = true;
+            }
+
+            let blurred = new cv.Mat();
+            cv.GaussianBlur(gray, blurred, new cv.Size(5, 5), 0, 0, cv.BORDER_DEFAULT);
+
+            let thresh = new cv.Mat();
+            if (isDarkMode) {
+                cv.adaptiveThreshold(blurred, thresh, 255, cv.ADAPTIVE_THRESH_GAUSSIAN_C, cv.THRESH_BINARY, 11, -2);
+            } else {
+                cv.adaptiveThreshold(blurred, thresh, 255, cv.ADAPTIVE_THRESH_GAUSSIAN_C, cv.THRESH_BINARY_INV, 11, 2);
+            }
+
+            let contours = new cv.MatVector();
+            let hierarchy = new cv.Mat();
+            cv.findContours(thresh, contours, hierarchy, cv.RETR_EXTERNAL, cv.CHAIN_APPROX_SIMPLE);
+
+            let maxArea = 0;
+            let maxContourIndex = -1;
+            for (let i = 0; i < contours.size(); ++i) {
+                let cnt = contours.get(i);
+                let area = cv.contourArea(cnt);
+                if (area > maxArea) {
+                    maxArea = area;
+                    maxContourIndex = i;
+                }
+            }
+
+            if (maxContourIndex === -1) {
+                throw new Error("盤面の輪郭が見つかりませんでした。");
+            }
+
+            let cnt = contours.get(maxContourIndex);
+            let rect = cv.boundingRect(cnt);
+
+            let boardMat = src.roi(rect);
+
+            cellsContainer.innerHTML = '';
+            cellCanvases = [];
+
+            let cellWidth = boardMat.cols / 9;
+            let cellHeight = boardMat.rows / 9;
+
+            for (let row = 0; row < 9; row++) {
+                for (let col = 0; col < 9; col++) {
+                    let cellRect = new cv.Rect(
+                        Math.round(col * cellWidth),
+                        Math.round(row * cellHeight),
+                        Math.round(cellWidth),
+                        Math.round(cellHeight)
+                    );
+
+                    let cellMat = boardMat.roi(cellRect);
+                    let processedCell = preprocessCell(cellMat, isDarkMode);
+
+                    let canvas = document.createElement('canvas');
+                    canvas.width = processedCell.mat.cols;
+                    canvas.height = processedCell.mat.rows;
+                    cv.imshow(canvas, processedCell.mat);
+                    canvas.dataset.hasDigit = processedCell.hasDigit;
+
+                    cellsContainer.appendChild(canvas);
+                    cellCanvases.push(canvas);
+
+                    processedCell.mat.delete();
+                    cellMat.delete();
+                }
+            }
+
+            src.delete(); gray.delete(); blurred.delete(); thresh.delete();
+            contours.delete(); hierarchy.delete(); boardMat.delete();
+
+            resolve();
+        } catch (err) {
+            reject(err);
+        }
+    });
+}
+
+function preprocessCell(cellMat, isDarkMode) {
+    let gray = new cv.Mat();
+    cv.cvtColor(cellMat, gray, cv.COLOR_RGBA2GRAY, 0);
+
+    let thresh = new cv.Mat();
+    if (isDarkMode) {
+        cv.threshold(gray, thresh, 0, 255, cv.THRESH_BINARY | cv.THRESH_OTSU);
+    } else {
+        cv.threshold(gray, thresh, 0, 255, cv.THRESH_BINARY_INV | cv.THRESH_OTSU);
+    }
+
+    let labels = new cv.Mat();
+    let stats = new cv.Mat();
+    let centroids = new cv.Mat();
+    let nLabels = cv.connectedComponentsWithStats(thresh, labels, stats, centroids);
+
+    let maxArea = 0;
+    let bestRect = null;
+
+    for (let i = 1; i < nLabels; i++) {
+        let left = stats.intAt(i, cv.CC_STAT_LEFT);
+        let top = stats.intAt(i, cv.CC_STAT_TOP);
+        let width = stats.intAt(i, cv.CC_STAT_WIDTH);
+        let height = stats.intAt(i, cv.CC_STAT_HEIGHT);
+        let area = stats.intAt(i, cv.CC_STAT_AREA);
+
+        let isTouchingBorder = (left <= 1 || top <= 1 || (left + width) >= thresh.cols - 1 || (top + height) >= thresh.rows - 1);
+
+        if (!isTouchingBorder) {
+            if (area > maxArea) {
+                maxArea = area;
+                bestRect = new cv.Rect(left, top, width, height);
+            }
+        }
+    }
+
+    let output = new cv.Mat.ones(thresh.rows, thresh.cols, cv.CV_8UC1);
+    output.setTo(new cv.Scalar(255));
+
+    let hasDigit = false;
+
+    if (bestRect && maxArea > (thresh.rows * thresh.cols * 0.005)) {
+        hasDigit = true;
+        let digitROI = thresh.roi(bestRect);
+        let targetX = Math.floor((output.cols - bestRect.width) / 2);
+        let targetY = Math.floor((output.rows - bestRect.height) / 2);
+        let targetRect = new cv.Rect(targetX, targetY, bestRect.width, bestRect.height);
+
+        let processedDigit = new cv.Mat();
+        cv.bitwise_not(digitROI, processedDigit);
+        processedDigit.copyTo(output.roi(targetRect));
+
+        processedDigit.delete();
+        digitROI.delete();
+    }
+
+    gray.delete(); thresh.delete();
+    labels.delete(); stats.delete(); centroids.delete();
+
+    return { mat: output, hasDigit: hasDigit };
+}
+
+// 対話的エラー修正モーダルのPromiseラッパー
+function showModalPrompt(canvas) {
+    return new Promise((resolve) => {
+        const modal = document.getElementById('ocr-correction-modal');
+        const img = document.getElementById('modal-cell-image');
+        const input = document.getElementById('modal-digit-input');
+        const btnSubmit = document.getElementById('modal-btn-submit');
+        const btnSkip = document.getElementById('modal-btn-skip');
+
+        img.src = canvas.toDataURL('image/png');
+        input.value = '';
+
+        modal.style.display = 'flex';
+        input.focus();
+
+        const cleanupAndResolve = (value) => {
+            modal.style.display = 'none';
+            btnSubmit.removeEventListener('click', onSubmit);
+            btnSkip.removeEventListener('click', onSkip);
+            input.removeEventListener('keydown', onKeydown);
+            resolve(value);
+        };
+
+        const onSubmit = () => {
+            const val = parseInt(input.value);
+            if (!isNaN(val) && val >= 1 && val <= 9) {
+                cleanupAndResolve(val);
+            } else {
+                input.focus();
+            }
+        };
+
+        const onSkip = () => {
+            cleanupAndResolve(0);
+        };
+
+        const onKeydown = (e) => {
+            if (e.key === 'Enter') {
+                onSubmit();
+            } else if (e.key === 'Escape') {
+                onSkip();
+            }
+        };
+
+        btnSubmit.addEventListener('click', onSubmit);
+        btnSkip.addEventListener('click', onSkip);
+        input.addEventListener('keydown', onKeydown);
+    });
+}
+
+// OCR解析 
+btnAnalyze.addEventListener('click', async () => {
+    btnAnalyze.disabled = true;
+    ocrStatus.style.color = '#ffcc00';
+    ocrStatus.textContent = t('ocrStatusLoading');
+    progressBar.style.display = 'block';
+    progressFill.style.width = '0%';
+    ocrResult.style.display = 'block';
+    ocrResult.textContent = 'OpenCV Processing...';
+
+    try {
+        if (typeof cv === 'undefined') {
+            throw new Error('OpenCV.js is not loaded yet.');
+        }
+
+        await processImageWithOpenCV();
+
+        const gridResult = [];
+
+        const worker = await Tesseract.createWorker('eng');
+        await worker.setParameters({
+            tessedit_char_whitelist: '0123456789',
+            tessedit_pageseg_mode: Tesseract.PSM.SINGLE_CHAR
+        });
+
+        ocrStatus.textContent = t('ocrStatusExtracting');
+        ocrResult.textContent = 'Tesseract OCR Started...';
+
+        for (let i = 0; i < 81; i++) {
+            const canvas = cellCanvases[i];
+            const definitelyHasDigit = canvas.dataset.hasDigit === 'true';
+
+            const ret = await worker.recognize(canvas);
+            const text = ret.data.text.trim();
+
+            let num = text.length > 0 && !isNaN(parseInt(text)) ? parseInt(text) : 0;
+
+            if (definitelyHasDigit && num === 0) {
+                canvas.style.border = '3px solid #ff0000';
+
+                let matchedNumber = null;
+                if (manualCorrectionCache.length > 0) {
+                    let currentMat = cv.imread(canvas);
+                    cv.cvtColor(currentMat, currentMat, cv.COLOR_RGBA2GRAY, 0);
+
+                    for (const cache of manualCorrectionCache) {
+                        let result = new cv.Mat();
+                        cv.matchTemplate(currentMat, cache.mat, result, cv.TM_CCOEFF_NORMED);
+                        let minMax = cv.minMaxLoc(result);
+
+                        if (minMax.maxVal > 0.95) {
+                            matchedNumber = cache.digit;
+                            console.log(`Matched cached digit ${matchedNumber} with confidence ${minMax.maxVal}`);
+                            result.delete();
+                            break;
+                        }
+                        result.delete();
+                    }
+                    currentMat.delete();
+                }
+
+                if (matchedNumber !== null) {
+                    num = matchedNumber;
+                } else {
+                    num = await showModalPrompt(canvas);
+
+                    if (num !== 0) {
+                        let cacheMat = cv.imread(canvas);
+                        cv.cvtColor(cacheMat, cacheMat, cv.COLOR_RGBA2GRAY, 0);
+                        manualCorrectionCache.push({ mat: cacheMat, digit: num });
+                    }
+                }
+
+                canvas.style.border = '1px solid var(--border-color)';
+            }
+
+            gridResult.push(num);
+            progressFill.style.width = `${Math.round(((i + 1) / 81) * 100)}%`;
+        }
+
+        ocrStatus.style.color = '#66ffaa';
+        ocrStatus.textContent = t('ocrStatusSuccess');
+
+        await worker.terminate();
+
+        // ----------------------------------------------------
+        // Phase 3: メインUIのソルバーに渡して盤面を構築する
+        // ----------------------------------------------------
+        ocrResult.textContent = 'Validating Solvability...';
+
+        ocrResult.textContent = 'Validating Solvability...';
+
+        // 1次元配列を2次元配列に変換
+        const grid2D = [];
+        for (let r = 0; r < 9; r++) {
+            grid2D.push(gridResult.slice(r * 9, r * 9 + 9));
+        }
+
+        // 初期盤面のルール違反（行・列・ブロック内の重複）がないかチェック
+        let isRuleValid = true;
+        for (let r = 0; r < 9; r++) {
+            for (let c = 0; c < 9; c++) {
+                const num = grid2D[r][c];
+                if (num !== 0) {
+                    grid2D[r][c] = 0; // 一旦空にする
+                    if (!SudokuLogicalSolver.isValid(grid2D, r, c, num)) {
+                        isRuleValid = false;
+                    }
+                    grid2D[r][c] = num; // 戻す
+                }
+            }
+        }
+
+        // 唯一解を持つかどうかの検証
+        let hasUniqueSolution = false;
+        if (isRuleValid) {
+            // grid2Dをコピーして渡す（solveメソッドが盤面を破壊する可能性があるため）
+            const gridCopy = grid2D.map(row => [...row]);
+            const solutionsCount = SudokuLogicalSolver.countSolutions(gridCopy, 2);
+            hasUniqueSolution = (solutionsCount === 1);
+        }
+
+        if (isRuleValid && hasUniqueSolution) {
+            // 難易度（テクニック）判定のために論理ソルバーを回す
+            const solver = new SudokuLogicalSolver(grid2D);
+            const result = solver.solve(); // 人間的ロジックで解ける限界まで解く
+
+            // 最終解答を生成して保存しておく
+            const solutionGrid = grid2D.map(row => [...row]);
+            SudokuLogicalSolver.solveSudoku(solutionGrid);
+            solution = solutionGrid;
+
+            // 解析完了：UIの盤面を初期化してモーダルを閉じる
+            ocrResult.textContent = t('ocrValidBoard');
+
+            // 盤面データをメインアプリの変数に適用
+            initialBoard = grid2D.map(row => [...row]);
+            board = grid2D.map(row => [...row]);
+            givenCells = grid2D.map(row => row.map(v => v !== 0));
+
+            // ゲームステートのリセット
+            memos = Array.from({ length: 9 }, () => Array.from({ length: 9 }, () => new Set()));
+            undoStack = [];
+            redoStack = [];
+            selectedRow = 0;
+            selectedCol = 0;
+            lastInputNumber = 0;
+            lastActionWasRocket = false;
+
+            // スキルレベルを表示 (論理ソルバーで解けた場合はそのスキル、解けなかった場合は 'Extreme (Manual Logic Failed)' など)
+            const techLevel = result.solved ? result.technique : 'Extreme';
+            messageEl.textContent = '🧠 ' + techLevel;
+            currentTechnique = techLevel;
+
+            // モーダルを閉じて画面を再描画
+            setTimeout(() => {
+                ocrModal.style.display = 'none';
+                renderBoard();
+                updateUndoRedoButtons();
+            }, 500);
+
+        } else {
+            let errorMsg = !isRuleValid
+                ? '盤面にルール違反（同じ列・行・ブロックに重複）があります。'
+                : '問題が複数解を持つか、解が存在しません。';
+
+            ocrResult.textContent = t('ocrInvalidBoard') + '\n詳細: ' + errorMsg + '\n\n' + JSON.stringify(grid2D);
+            ocrResult.style.color = '#ff6666';
+        }
+
+    } catch (err) {
+        console.error(err);
+        ocrStatus.style.color = '#ff6666';
+        ocrStatus.textContent = t('ocrStatusError');
+        ocrResult.textContent = err.toString();
+        progressBar.style.display = 'none';
+    } finally {
+        btnAnalyze.disabled = false;
+    }
+});
