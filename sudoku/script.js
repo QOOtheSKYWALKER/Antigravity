@@ -57,35 +57,7 @@ const translations = {
     }
 };
 
-// Force inject modal CSS (Workaround for parsing issue)
-(function injectModalCSS() {
-    const style = document.createElement('style');
-    style.textContent = `
-        .modal-overlay {
-            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
-            background: rgba(0, 0, 0, 0.8); display: flex; justify-content: center;
-            align-items: center; z-index: 1000; opacity: 0; pointer-events: none;
-            transition: opacity 0.3s ease;
-        }
-        .modal-overlay.show { opacity: 1; pointer-events: auto; }
-        .modal-content {
-            background: var(--bg-panel); padding: 24px; border-radius: 12px;
-            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3); text-align: center;
-            max-width: 300px; width: 90%; transform: translateY(20px);
-            transition: transform 0.3s ease;
-        }
-        .modal-overlay.show .modal-content { transform: translateY(0); }
-        .modal-content h2 { margin-top: 0; margin-bottom: 12px; font-size: 1.2rem; color: var(--text-main); }
-        .modal-content p { margin-bottom: 24px; color: var(--text-sub); }
-        .modal-buttons { display: flex; gap: 12px; }
-        .modal-btn { flex: 1; padding: 10px; border: none; border-radius: 6px; cursor: pointer; font-weight: bold; transition: background 0.2s; }
-        .modal-btn.yes { background: var(--accent-color); color: white; }
-        .modal-btn.yes:hover { filter: brightness(1.1); }
-        .modal-btn.no { background: var(--key-bg); color: var(--text-main); }
-        .modal-btn.no:hover { background: var(--key-hover); }
-    `;
-    document.head.appendChild(style);
-})();
+
 
 let currentLang = localStorage.getItem('sudoku-lang') || 'ja';
 
@@ -201,62 +173,40 @@ const btnRedo = document.getElementById('btn-redo');
 
 // ===== パズル生成 =====
 
-// ===== Worker =====
+function initGame(difficulty) {
+    currentDifficulty = difficulty;
 
-let worker;
-try {
-    worker = new Worker('worker.js');
-    console.log('Worker initialized successfully');
-} catch (e) {
-    console.error('Worker init failed:', e);
-    alert('Worker init failed: ' + e.message + '. Try running on a local server.');
-    throw e; // Stop execution
+    // UI: Set active button immediately (no generating state)
+    document.querySelectorAll('.diff-btn').forEach(btn => {
+        btn.classList.remove('active');
+        if (btn.dataset.level === difficulty) {
+            btn.classList.add('active');
+        }
+    });
+
+    // 同期処理でパズルを即座に生成
+    const result = SudokuLogicalSolver.generatePuzzle(difficulty);
+
+    solution = result.solution;
+    board = result.puzzle.map(r => [...r]);
+    initialBoard = result.puzzle.map(r => [...r]);
+    givenCells = result.puzzle.map(r => r.map(v => v !== 0));
+    memos = Array.from({ length: 9 }, () =>
+        Array.from({ length: 9 }, () => new Set())
+    );
+
+    // Reset Game State
+    selectedRow = 0;
+    selectedCol = 0;
+    lastInputNumber = 0;
+    undoStack = [];
+    redoStack = [];
+
+    messageEl.textContent = '';
+    updateUndoRedoButtons();
+    renderBoard();
+    lastActionWasRocket = false;
 }
-
-worker.onmessage = function (e) {
-    const { type, puzzle, solution: sol, difficulty, message } = e.data;
-    if (type === 'success') {
-        solution = sol;
-        board = puzzle.map(r => [...r]);
-        initialBoard = puzzle.map(r => [...r]);
-        givenCells = puzzle.map(r => r.map(v => v !== 0));
-        memos = Array.from({ length: 9 }, () =>
-            Array.from({ length: 9 }, () => new Set())
-        );
-
-        // Reset Game State
-        selectedRow = 0;
-        selectedCol = 0;
-        lastInputNumber = 0;
-        undoStack = [];
-        redoStack = [];
-
-        messageEl.textContent = ''; // Clear loading
-        boardEl.style.opacity = '1';
-
-        // UI: Remove generating animation and set active
-        document.querySelectorAll('.diff-btn').forEach(btn => {
-            btn.classList.remove('generating');
-            if (btn.dataset.level === difficulty) { // worker returns actual difficulty
-                btn.classList.add('active');
-            } else {
-                btn.classList.remove('active');
-            }
-        });
-
-        updateUndoRedoButtons();
-        renderBoard();
-        lastActionWasRocket = false;
-
-        console.log(`Generated ${difficulty} puzzle via Worker.`);
-    } else if (type === 'error') {
-        console.error('Worker Error:', message);
-        messageEl.textContent = '生成エラーが発生しました';
-        boardEl.style.opacity = '1';
-    }
-};
-
-// 元の同期generatePuzzleなどのロジックはworker.jsに移動済み
 
 
 // ===== Undo/Redo =====
@@ -411,29 +361,7 @@ function scheduleRender() {
     }
 }
 
-/**
- * ゲームを初期化する
- */
-function initGame(difficulty) {
-    currentDifficulty = difficulty;
 
-    // UI Loading State
-    messageEl.textContent = t('generating') + ' ⏳';
-    boardEl.style.opacity = '0.5'; // Dim board while loading
-
-    // UI: Set generating animation
-    document.querySelectorAll('.diff-btn').forEach(btn => {
-        btn.classList.remove('active', 'generating');
-        if (btn.dataset.level === difficulty) {
-            btn.classList.add('generating');
-        }
-    });
-
-    // Request Worker to generate
-    worker.postMessage({ command: 'generate', difficulty: difficulty });
-
-    // Note: board initialization will happen in worker.onmessage
-}
 
 
 /**
@@ -698,66 +626,17 @@ document.querySelectorAll('.diff-btn').forEach(btn => {
     btn.addEventListener('click', () => {
         const level = btn.dataset.level;
 
-        // 同じ難易度で生成中なら何もしない
-        if (btn.classList.contains('generating')) return;
-
+        // 同じ難易度で既にアクティブなら何もしない
         // 生成IDをインクリメント（前回の生成結果を無効化）
         const thisGenId = ++generationId;
-
-        // ボタン状態を即座に更新
-        const allBtns = document.querySelectorAll('.diff-btn');
-        allBtns.forEach(b => {
-            b.classList.remove('active');
-            b.classList.remove('generating');
-        });
-        btn.classList.add('active');
-        btn.classList.add('generating');
-
-        // 二重RAFで描画完了を保証してから同期的な生成を開始
-        // 1回目のRAF: DOMの変更がレイアウトに反映される
-        // 2回目のRAF: ブラウザが1回目の変更を描画した後に実行される
-        requestAnimationFrame(() => {
-            requestAnimationFrame(() => {
-                // この生成がキャンセルされていないか確認
-                if (thisGenId !== generationId) return;
-
-                initGame(level);
-                btn.classList.remove('generating');
-            });
-        });
+        initGame(level);
     });
 });
 
-const modal = document.getElementById('reset-modal');
-const modalYes = document.getElementById('modal-yes');
-const modalNo = document.getElementById('modal-no');
-
-function showModal() {
-    modal.classList.add('show');
-    modal.classList.remove('hidden');
-}
-
-function hideModal() {
-    modal.classList.remove('show');
-    setTimeout(() => modal.classList.add('hidden'), 300); // wait for transition
-}
-
 document.getElementById('btn-reset').addEventListener('click', () => {
-    showModal();
-});
-
-modalYes.addEventListener('click', () => {
-    resetBoard();
-    hideModal();
-});
-
-modalNo.addEventListener('click', () => {
-    hideModal();
-});
-
-// Close on outside click
-modal.addEventListener('click', (e) => {
-    if (e.target === modal) hideModal();
+    if (confirm(t('confirmReset'))) {
+        resetBoard();
+    }
 });
 
 const btnRocket = document.getElementById('btn-rocket');
@@ -860,7 +739,7 @@ function handleRocket() {
     updateHighlight();
     scheduleRender();
     if (checkWin()) {
-        messageEl.textContent = '🎉 クリア！';
+        messageEl.textContent = t('clear');
     } else if (changesMade && !conflictFound && !memoFilled) {
         messageEl.textContent = t('rocketFilled');
     }

@@ -1,0 +1,11 @@
+Starting Sudoku Generation Benchmark (10 trials each)...
+
+=== Benchmarking Difficulty: easy ===
+Trial 1/10: 965ms [reverse]
+Trial 2/10: 1860ms [reverse]
+Trial 3/10: 2067ms [subtractive]
+Trial 4/10: 2048ms [subtractive]
+Trial 5/10: 687ms [reverse]
+Trial 6/10: 2027ms [subtractive]
+Trial 7/10: 1741ms [reverse]
+Trial 8/10: 2055ms [subtractive]
