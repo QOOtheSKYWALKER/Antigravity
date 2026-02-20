@@ -1210,6 +1210,8 @@ SudokuLogicalSolver.generatePuzzle = function (difficulty) {
     const targetRank = diffRank[difficulty] || 3;
     const maxRetries = 100; // 安全のための無限ループ防止
 
+    let bestFallback = null;
+
     // 万が一のためのリトライ処理（通常は1~2回で成功する）
     for (let attempts = 0; attempts < maxRetries; attempts++) {
         const grid = Array.from({ length: 9 }, () => Array(9).fill(0));
@@ -1245,20 +1247,27 @@ SudokuLogicalSolver.generatePuzzle = function (difficulty) {
         const finalSolver = new SudokuLogicalSolver(puzzle);
         const finalRes = finalSolver.solve();
 
-        if (finalRes.solved && finalRes.difficulty === difficulty) {
-            return {
+        // フォールバック用に、最後に生成成功した盤面を保存しておく（失敗しても、少なくとも解ける盤面は確保する）
+        if (finalRes.solved) {
+            bestFallback = {
                 puzzle: puzzle,
                 solution: solution,
                 difficulty: finalRes.difficulty,
                 technique: finalRes.technique
             };
         }
+
+        if (finalRes.solved && finalRes.difficulty === difficulty) {
+            return bestFallback;
+        }
     }
 
     // fallback (Should not reach here under normal circumstances due to extreme effectiveness of the algorithm)
     console.warn("SudokuLogicalSolver: failed to generate perfect puzzle, returning last valid but loose constraint board.");
-    // Generate a basic valid one as a desperate fallback just so it doesn't crash
+    if (bestFallback) return bestFallback;
+
+    // それでもダメな場合の究極のフォールバック
     const grid = Array.from({ length: 9 }, () => Array(9).fill(0));
     SudokuLogicalSolver.solveSudoku(grid);
-    return { puzzle: grid, solution: grid, difficulty: 'basic' };
+    return { puzzle: grid, solution: grid, difficulty: 'basic', technique: 'Naked Single' };
 };

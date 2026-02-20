@@ -22,7 +22,6 @@ const translations = {
         guideRedo: 'Ctrl/⌘+Y : やり直す',
         modeInput: '入力モード',
         modeMemo: 'メモモード📝',
-        generating: '生成中...',
         confirmReset: '現在の盤面をリセットしますか？',
         resetConfirmTitle: '確認',
         yes: 'はい',
@@ -49,7 +48,6 @@ const translations = {
         guideRedo: 'Ctrl/⌘+Y : Redo',
         modeInput: 'Input Mode',
         modeMemo: 'Memo Mode 📝',
-        generating: 'Generating...',
         confirmReset: 'Reset the current board?',
         resetConfirmTitle: 'Confirm',
         yes: 'Yes',
@@ -150,7 +148,8 @@ let selectedCol = 0;       // 選択中のセル列
 let memoMode = false;      // メモモード
 let currentDifficulty = 'hard';
 let lastInputNumber = 0;   // 直近入力数字（ハイライト用）
-let generationId = 0;      // パズル生成ID（キャンセル検出用）
+let currentTechnique = ''; // 現在のパズルの最高難易度テクニック
+let lastActionWasRocket = false; // ロケットボタンの連続押下判定用
 
 // Undo/Redo
 const MAX_HISTORY = 127;   // 履歴の上限
@@ -202,7 +201,8 @@ function initGame(difficulty) {
     undoStack = [];
     redoStack = [];
 
-    messageEl.textContent = '🧠 ' + result.technique;
+    currentTechnique = result.technique;
+    messageEl.textContent = '🧠 ' + currentTechnique;
     updateUndoRedoButtons();
     renderBoard();
     lastActionWasRocket = false;
@@ -340,7 +340,7 @@ function resetBoard() {
     undoStack = [];
     redoStack = [];
     lastInputNumber = 0;
-    messageEl.textContent = '';
+    messageEl.textContent = '🧠 ' + currentTechnique;
     updateUndoRedoButtons();
     renderBoard();
     lastActionWasRocket = false;
@@ -627,8 +627,6 @@ document.querySelectorAll('.diff-btn').forEach(btn => {
         const level = btn.dataset.level;
 
         // 同じ難易度で既にアクティブなら何もしない
-        // 生成IDをインクリメント（前回の生成結果を無効化）
-        const thisGenId = ++generationId;
         initGame(level);
     });
 });
@@ -640,7 +638,6 @@ document.getElementById('btn-reset').addEventListener('click', () => {
 });
 
 const btnRocket = document.getElementById('btn-rocket');
-let lastActionWasRocket = false; // ロケットボタンの連続押下判定用
 
 // ...(中略)...
 
