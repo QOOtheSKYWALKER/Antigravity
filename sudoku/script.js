@@ -202,7 +202,7 @@ function initGame(difficulty) {
     undoStack = [];
     redoStack = [];
 
-    messageEl.textContent = '';
+    messageEl.textContent = '🧠 ' + result.technique;
     updateUndoRedoButtons();
     renderBoard();
     lastActionWasRocket = false;
@@ -700,9 +700,6 @@ function handleRocket() {
 
     // 2. Auto-fill Memos (Conditions: No changes by singles AND previous action was Rocket AND empty cells exist)
     if (!changesMade && !conflictFound && lastActionWasRocket) {
-        // メモ含めて何も入力されていないマスが一つでもあった場合 -> 実行
-        // 未確定の全てのマスにおいて、そのマスに入りうる数字を全てメモ
-
         let hasEmptyNoMemo = false;
         let hasEmpty = false;
         for (let r = 0; r < 9; r++) {
@@ -714,24 +711,50 @@ function handleRocket() {
             }
         }
 
-        if (hasEmptyNoMemo && hasEmpty) {
+        if (hasEmpty) {
             const solver = new SudokuLogicalSolver(board);
-            // 初期化時点での候補を取得
-            // SolverのcandidatesはSetの配列
-            for (let r = 0; r < 9; r++) {
-                for (let c = 0; c < 9; c++) {
-                    if (board[r][c] === 0) {
-                        // Solverの候補をUIのメモに反映
-                        const cands = solver.candidates[r][c];
-                        if (cands) {
-                            memos[r][c] = new Set(cands);
+            // 最初からLocked Candidatesを適用して除外できる候補を減らしておく
+            solver.applyLockedCandidates();
+
+            if (hasEmptyNoMemo) {
+                // メモが空のマスが1つでもあれば、全空きマスに対して一括入力
+                for (let r = 0; r < 9; r++) {
+                    for (let c = 0; c < 9; c++) {
+                        if (board[r][c] === 0) {
+                            const cands = solver.candidates[r][c];
+                            if (cands) {
+                                memos[r][c] = new Set(cands);
+                            }
                         }
                     }
                 }
+                changesMade = true;
+                memoFilled = true;
+                messageEl.textContent = t('memoDone');
+            } else {
+                // 全てのマスにメモが入っている場合、確定マスから類推した論理的候補とIntersectしてトリミングする
+                let memoRemoved = false;
+                for (let r = 0; r < 9; r++) {
+                    for (let c = 0; c < 9; c++) {
+                        if (board[r][c] === 0) {
+                            const validCands = solver.candidates[r][c];
+                            const currentMemo = memos[r][c];
+                            for (const val of currentMemo) {
+                                if (!validCands.has(val)) {
+                                    currentMemo.delete(val);
+                                    memoRemoved = true;
+                                }
+                            }
+                        }
+                    }
+                }
+
+                if (memoRemoved) {
+                    changesMade = true;
+                    memoFilled = true;
+                    messageEl.textContent = '🧠 Locked Candidates';
+                }
             }
-            changesMade = true;
-            memoFilled = true;
-            messageEl.textContent = t('memoDone');
         }
     }
 

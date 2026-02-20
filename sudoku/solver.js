@@ -100,9 +100,11 @@ class SudokuLogicalSolver {
             if (this.applyWWing()) { changed = true; continue; }
         }
 
+        const diffInfo = this.getDifficultyInfo();
         return {
             solved: this.isSolved(),
-            difficulty: this.calculateDifficulty(),
+            difficulty: diffInfo.level,
+            technique: diffInfo.technique,
             log: this.difficultyLog
         };
     }
@@ -116,7 +118,7 @@ class SudokuLogicalSolver {
         return true;
     }
 
-    calculateDifficulty() {
+    getDifficultyInfo() {
         // EASY: Locked Candidates (Pointing & Claiming) のみ
         // MEDIUM: Naked/Hidden Pair, Naked/Hidden Triple
         // HARD: X-Wing / Y-Wing / Swordfish / Skyscraper / W-Wing
@@ -138,17 +140,30 @@ class SudokuLogicalSolver {
         };
 
         let maxDifficulty = 'basic';
+        let maxTechnique = 'Naked Single'; // Default fallback
         const rank = { 'basic': 0, 'easy': 1, 'medium': 2, 'hard': 3 };
 
         for (const log of this.difficultyLog) {
             const diff = levels[log.technique];
-            if (diff && rank[diff] > rank[maxDifficulty]) {
-                maxDifficulty = diff;
+            if (diff && rank[diff] >= rank[maxDifficulty]) {
+                if (rank[diff] > rank[maxDifficulty]) {
+                    maxDifficulty = diff;
+                    maxTechnique = log.technique;
+                } else {
+                    // 同一難易度帯の中で後から出てきた（より高度な）テクニックを優先
+                    maxTechnique = log.technique;
+                }
             }
         }
 
-        return maxDifficulty;
+        return { level: maxDifficulty, technique: maxTechnique };
     }
+
+    calculateDifficulty() {
+        return this.getDifficultyInfo().level;
+    }
+
+
 
     // ===== STRATEGIES =====
 
@@ -1234,7 +1249,8 @@ SudokuLogicalSolver.generatePuzzle = function (difficulty) {
             return {
                 puzzle: puzzle,
                 solution: solution,
-                difficulty: finalRes.difficulty
+                difficulty: finalRes.difficulty,
+                technique: finalRes.technique
             };
         }
     }
