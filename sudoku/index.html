@@ -91,54 +91,103 @@
     <!-- ===== OCR App Integrated Modal ===== -->
     <div id="ocr-main-modal" class="ocr-modal-overlay" style="display: none;">
         <div class="ocr-modal-content">
+            <!-- Loading Spinner Overlay -->
+            <div id="ocr-loading-spinner" class="ocr-spinner-overlay" style="display: none;">
+                <div class="ocr-spinner"></div>
+                <p>OCRエンジン準備中...</p>
+            </div>
+
             <div class="ocr-header">
                 <h2>📷 画像から盤面を読み込む</h2>
                 <button id="btn-ocr-close" class="ocr-close-btn">&times;</button>
             </div>
 
-            <div id="upload-zone" class="upload-zone">
-                <p>ここに数独の画像（スクショ等）をドラッグ＆ドロップ</p>
-                <p>またはクリックしてファイルを選択</p>
+            <div id="upload-zone" class="upload-zone" tabindex="0">
+                <div id="upload-default-msg">
+                    <p>ここに数独の画像（スクショ等）をドラッグ＆ドロップ</p>
+                    <p>またはクリックしてファイルを選択</p>
+                </div>
+                <div id="upload-error-msg" style="display: none; text-align: left;">
+                    <p style="color: #ff6666; font-weight: bold; margin-bottom: 10px; text-align: center;"
+                        data-i18n="ocrErrorTotalMsg1">⚠️
+                        認識できませんでした。</p>
+                    <ul style="font-size: 0.9rem; color: var(--text-color); margin-bottom: 15px; padding-left: 20px;">
+                        <li data-i18n="ocrErrorTotalReason1">スクリーンショットですか？（斜めから撮ったカメラ写真は認識しません）</li>
+                        <li data-i18n="ocrErrorTotalReason2">ライトモードですか？（ダークモードは失敗しやすいです）</li>
+                    </ul>
+                    <p style="text-align: center; color: #a8c7fa;" data-i18n="ocrErrorTotalHint">💡
+                        ここに別の画像を再ドロップ、またはクリック</p>
+                </div>
+                <button id="btn-paste" class="diff-btn" style="margin-top: 10px; font-size: 0.9rem;">📋
+                    クリップボードから画像を読む</button>
                 <input type="file" id="file-input" accept="image/*" style="display: none">
             </div>
 
-            <div class="ocr-controls">
-                <button id="btn-analyze" disabled>解析開始 (OCR)</button>
-            </div>
-
-            <div class="ocr-progress-container">
+            <div class="ocr-progress-container" style="display: none;">
                 <div id="ocr-progress-bar" class="progress-bar">
                     <div id="ocr-progress-fill" class="progress-fill"></div>
                 </div>
-                <div id="ocr-status" class="status-text">画像がロードされました。解析待ち。</div>
+                <div id="ocr-status" class="status-text">画像がロードされました。解析を開始してください。</div>
             </div>
 
-            <div class="ocr-canvas-container">
+            <!-- 完了ステート A: 正常終了 (解が存在) -->
+            <div id="ocr-state-success" class="ocr-state-panel" style="display: none;">
+                <p class="success-text" data-i18n="ocrSuccessMsg">正常に完了しました！</p>
+                <div class="ocr-controls">
+                    <button id="btn-state-play" class="action-btn" data-i18n="ocrPlayBtn">PLAY (ゲーム開始)</button>
+                </div>
+            </div>
+
+            <!-- 完了ステート C: 部分エラー (いくつか認識できない) -->
+            <div id="ocr-state-partial-fail" class="ocr-state-panel warning-panel" style="display: none;">
+                <p data-i18n="ocrPartialFailMsg">🤔 いくつか認識できないマスがありました。</p>
+                <div class="ocr-controls">
+                    <button id="btn-state-input" class="action-btn" data-i18n="ocrInputBtn">入力する</button>
+                </div>
+            </div>
+
+            <!-- 完了ステート D: 解なし・ルール違反用 手動編集グリッド -->
+            <div id="ocr-state-manual-grid" class="ocr-state-panel" style="display: none;">
+                <div class="error-banner">
+                    <p data-i18n="ocrManualWarning1">⚠️ 解析した盤面になにか間違いがあるようです（重複ルール違反、または解が存在しません）。</p>
+                    <p data-i18n="ocrManualWarning2">間違っている数字をタップして修正してください！</p>
+                </div>
+                <div id="ocr-manual-grid" class="manual-grid"></div>
+                <div class="ocr-controls" style="margin-top: 15px;">
+                    <button id="btn-manual-play" class="action-btn" data-i18n="ocrManualPlayBtn">PLAY (再検証して開始)</button>
+                </div>
+            </div>
+
+            <div class="ocr-canvas-container" style="display: none;">
                 <canvas id="main-canvas"></canvas>
-                <div id="cells-container" class="cells-grid"></div>
+                <!-- 内部処理表示用のキャンバスは不要なので非表示に -->
+                <div id="cells-container" class="cells-grid" style="display: none;"></div>
             </div>
 
+            <!-- 結果メッセージエリア (デバッグログ兼エラー詳細) -->
             <pre id="ocr-result" class="debug-log"></pre>
+
+
+
+            <!-- (削除) 古い解析開始ボタンエリア -->
         </div>
     </div>
 
     <!-- ===== Interactive OCR Error Correction Modal (Nested or Peer) ===== -->
     <div id="ocr-correction-modal" class="ocr-correction-overlay" style="display: none;">
         <div class="ocr-correction-box">
-            <h3>認識エラー</h3>
+            <h3><span class="ocr-correction-title-text">認識エラー</span> <span id="modal-step-counter"
+                    style="font-size: 0.9rem; color: #888; font-weight: normal; margin-left: 10px;"></span></h3>
             <p>このマスの数字は何ですか？</p>
             <img id="modal-cell-image" alt="エラーマス画像">
-            <input type="number" id="modal-digit-input" min="1" max="9" placeholder="1-9">
+            <input type="number" id="modal-digit-input" min="1" max="9" inputmode="numeric" pattern="[0-9]*"
+                placeholder="1-9">
             <div class="modal-buttons">
                 <button id="modal-btn-submit">確定 (Enter)</button>
                 <button id="modal-btn-skip" class="modal-skip">空マスにする (Esc)</button>
             </div>
         </div>
     </div>
-
-    <!-- OpenCV & Tesseract Scripts -->
-    <script src="lib/opencv.js" async></script>
-    <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
 
     <script src="solver.js"></script>
     <script src="script.js"></script>
