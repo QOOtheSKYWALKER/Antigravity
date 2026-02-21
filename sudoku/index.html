@@ -14,8 +14,8 @@
             <div class="title-bar">
                 <h1><a href="about.html" style="color:inherit;text-decoration:none" title="概要ページ">SUDOKU</a></h1>
                 <div class="difficulty-buttons">
-                    <button id="btn-ocr-open" class="diff-btn"
-                        style="background-color: var(--rocket-bg); color: var(--rocket-color); border-color: var(--rocket-border);"
+                    <button id="btn-ocr-open" class="action-btn"
+                        style="background-color: var(--rocket-bg); color: var(--rocket-color); border-color: var(--rocket-border); border-radius: 8px; padding: 12px; font-weight: bold; cursor: pointer; border: none;"
                         data-i18n="importOcr" title="画像を読み込んで解析">📷 取込</button>
                     <button id="btn-easy" class="diff-btn" data-level="easy">Easy</button>
                     <button id="btn-medium" class="diff-btn" data-level="medium">Medium</button>
@@ -140,32 +140,39 @@
 
             <!-- 完了ステート C: 部分エラー (いくつか認識できない) -->
             <div id="ocr-state-partial-fail" class="ocr-state-panel warning-panel" style="display: none;">
-                <p data-i18n="ocrPartialFailMsg">🤔 いくつか認識できないマスがありました。</p>
+                <p><span class="status-icon">🤔</span> <span data-i18n="ocrPartialFailMsg">いくつか認識できないマスがありました。</span>
+                </p>
                 <div class="ocr-controls">
                     <button id="btn-state-input" class="action-btn" data-i18n="ocrInputBtn">入力する</button>
                 </div>
             </div>
 
-            <!-- 完了ステート D: 解なし・ルール違反用 手動編集グリッド -->
-            <div id="ocr-state-manual-grid" class="ocr-state-panel" style="display: none;">
-                <div class="error-banner">
-                    <p data-i18n="ocrManualWarning1">⚠️ 解析した盤面になにか間違いがあるようです（重複ルール違反、または解が存在しません）。</p>
-                    <p data-i18n="ocrManualWarning2">間違っている数字をタップして修正してください！</p>
-                </div>
-                <div id="ocr-manual-grid" class="manual-grid"></div>
-                <div class="ocr-controls" style="margin-top: 15px;">
+            <!-- 完了ステート D: 解なし・ルール違反用 -->
+            <div id="ocr-state-manual-grid" class="ocr-state-panel warning-panel" style="display: none;">
+                <p><span class="status-icon">⚠️</span> <span
+                        data-i18n="ocrManualWarning1">解析した盤面になにか間違いがあるようです（重複ルール違反、または解が存在しません）。</span></p>
+                <div class="ocr-controls">
                     <button id="btn-manual-play" class="action-btn" data-i18n="ocrManualPlayBtn">PLAY (再検証して開始)</button>
                 </div>
             </div>
 
             <div class="ocr-canvas-container" style="display: none;">
-                <canvas id="main-canvas"></canvas>
+                <div class="ocr-preview-column">
+                    <div class="preview-label">Original Image</div>
+                    <canvas id="main-canvas"></canvas>
+                </div>
+                <div class="ocr-preview-column">
+                    <div class="preview-label" id="ocr-preview-label">Parsed Grid</div>
+                    <div id="ocr-parsed-preview" class="parsed-preview-grid"></div>
+                    <div id="ocr-manual-grid" class="manual-grid" style="display: none;"></div>
+                </div>
             </div>
-
-
-
-            <!-- (削除) 古い解析開始ボタンエリア -->
         </div>
+
+
+
+        <!-- (削除) 古い解析開始ボタンエリア -->
+    </div>
     </div>
 
     <!-- ===== Interactive OCR Error Correction Modal (Nested or Peer) ===== -->

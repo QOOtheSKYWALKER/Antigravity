@@ -847,17 +847,96 @@ h1 {
 
 .ocr-canvas-container {
     display: flex;
+    flex-direction: row;
+    /* Horizontal on desktop */
+    flex-wrap: wrap;
+    /* Vertical on mobile */
+    justify-content: center;
+    gap: 30px;
+    margin-top: 20px;
+    width: 100%;
+    box-sizing: border-box;
+}
+
+.status-icon {
+    font-size: 1.2rem;
+    margin-right: 8px;
+    vertical-align: middle;
+}
+
+.ocr-preview-column {
+    display: flex;
     flex-direction: column;
     align-items: center;
-    gap: 20px;
-    margin-top: 20px;
+    gap: 10px;
+    flex: 1;
+    min-width: 280px;
+    box-sizing: border-box;
+}
+
+.preview-label {
+    font-size: 0.8rem;
+    font-weight: bold;
+    color: var(--accent-color);
+    text-transform: uppercase;
+    letter-spacing: 1px;
 }
 
 #main-canvas {
     max-width: 100%;
-    max-height: 300px;
+    max-height: 280px;
+    border: 2px solid var(--border-color);
+    background-color: #111;
+    border-radius: 4px;
+}
+
+.parsed-preview-grid {
+    display: grid;
+    grid-template-columns: repeat(9, 32px);
+    grid-template-rows: repeat(9, 32px);
+    width: 292px;
+    /* 32*9 + 4px (external boundaries roughly) or rather let's be pixel perfect */
+    /* Adjusting to be exactly 292x292 including the 2px outer border */
+    width: 292px;
+    height: 292px;
+    background-color: var(--panel-bg);
+    border: 2px solid var(--text-color);
+    box-sizing: border-box;
+    overflow: hidden;
+}
+
+.preview-cell {
+    display: flex;
+    justify-content: center;
+    align-items: center;
     border: 1px solid var(--border-color);
-    background-color: #000;
+    font-family: 'Outfit', sans-serif;
+    font-weight: bold;
+    font-size: 1.2rem;
+    color: var(--text-color);
+    box-sizing: border-box;
+    width: 32px;
+    height: 32px;
+}
+
+/* 3x3 Bold Borders */
+.preview-cell:nth-child(3n) {
+    border-right: 2px solid var(--text-color);
+}
+
+.preview-cell:nth-child(9n) {
+    border-right: 1px solid var(--border-color);
+}
+
+.preview-cell:nth-child(n+19):nth-child(-n+27),
+.preview-cell:nth-child(n+46):nth-child(-n+54) {
+    border-bottom: 2px solid var(--text-color);
+}
+
+.preview-cell.unrecognized {
+    color: #ff9900;
+    font-size: 1.4rem;
+    background-color: rgba(255, 153, 0, 0.1);
 }
 
 
@@ -874,7 +953,10 @@ h1 {
     background: rgba(0, 0, 0, 0.85);
     display: flex;
     justify-content: center;
-    align-items: center;
+    align-items: flex-start;
+    /* Changed to top-aligned for mobile keyboard */
+    padding-top: 40px;
+    /* Buffer from top */
     z-index: 1000;
     backdrop-filter: blur(4px);
 }
@@ -888,19 +970,6 @@ h1 {
     width: 90%;
     text-align: center;
     box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
-    animation: popIn 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
-}
-
-@keyframes popIn {
-    0% {
-        transform: scale(0.9);
-        opacity: 0;
-    }
-
-    100% {
-        transform: scale(1);
-        opacity: 1;
-    }
 }
 
 .ocr-correction-box h3 {
@@ -1000,26 +1069,30 @@ h1 {
 
 .manual-grid {
     display: grid;
-    grid-template-columns: repeat(9, 1fr);
-    width: 100%;
-    max-width: 400px;
-    background-color: var(--border-color);
-    border: 2px solid var(--border-color);
-    gap: 1px;
+    grid-template-columns: repeat(9, 32px);
+    grid-template-rows: repeat(9, 32px);
+    width: 292px;
+    height: 292px;
+    background-color: var(--panel-bg);
+    border: 2px solid var(--text-color);
+    box-sizing: border-box;
+    gap: 0;
+    overflow: hidden;
 }
 
 .manual-grid input {
-    aspect-ratio: 1;
-    width: 100%;
-    border: none;
+    width: 32px;
+    height: 32px;
+    border: 1px solid var(--border-color);
     text-align: center;
     font-size: 1.2rem;
     font-weight: bold;
     color: var(--text-color);
-    background-color: var(--bg-color);
+    background-color: transparent;
     outline: none;
     padding: 0;
     font-family: var(--font-family);
+    box-sizing: border-box;
 }
 
 .manual-grid input:focus {
@@ -1028,16 +1101,16 @@ h1 {
 
 /* 3x3ブロックの境界線を太くするためのスタイル */
 .manual-grid input:nth-child(3n) {
-    border-right: 1px solid var(--border-color);
+    border-right: 2px solid var(--text-color);
 }
 
 .manual-grid input:nth-child(9n) {
-    border-right: none;
+    border-right: 1px solid var(--border-color);
 }
 
 .manual-grid input:nth-child(n+19):nth-child(-n+27),
 .manual-grid input:nth-child(n+46):nth-child(-n+54) {
-    border-bottom: 1px solid var(--border-color);
+    border-bottom: 2px solid var(--text-color);
 }
 
 /* ナンバーインプットの上下スピンボタン（矢印）を非表示にする */
@@ -1071,22 +1144,7 @@ h1 {
     padding: 15px;
 }
 
-.ocr-state-panel.error-panel {
-    background-color: rgba(255, 60, 60, 0.05);
-    border-color: rgba(255, 60, 60, 0.3);
-}
-
-.ocr-state-panel.warning-panel {
-    background-color: rgba(255, 204, 0, 0.05);
-    border-color: rgba(255, 204, 0, 0.3);
-}
-
-.success-text {
-    font-size: 1.2rem;
-    font-weight: bold;
-    color: #66ffaa;
-    margin: 0;
-}
+/* Unused or replaced styles removed */
 
 .action-btn {
     background-color: var(--rocket-bg);

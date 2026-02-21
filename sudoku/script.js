@@ -48,9 +48,9 @@ const translations = {
         ocrErrorTotalHint: '💡 ここに別の画像を再ドロップ、またはクリック',
         ocrSuccessMsg: '正常に完了しました！',
         ocrPlayBtn: 'PLAY (ゲーム開始)',
-        ocrPartialFailMsg: '🤔 いくつか認識できないマスがありました。',
+        ocrPartialFailMsg: 'いくつか認識できないマスがありました。',
         ocrInputBtn: '入力する',
-        ocrManualWarning1: '⚠️ 解析した盤面になにか間違いがあるようです（重複ルール違反、または解が存在しません）。',
+        ocrManualWarning1: '解析した盤面になにか間違いがあるようです（重複ルール違反、または解が存在しません）。',
         ocrManualWarning2: '間違っている数字をタップして修正してください！',
         ocrManualPlayBtn: 'PLAY (再検証して開始)'
     },
@@ -101,9 +101,9 @@ const translations = {
         ocrErrorTotalHint: '💡 Drop another image here, or click to browse',
         ocrSuccessMsg: 'Analysis Successful!',
         ocrPlayBtn: 'PLAY (Start Game)',
-        ocrPartialFailMsg: '🤔 Some cells could not be recognized.',
+        ocrPartialFailMsg: 'Some cells could not be recognized.',
         ocrInputBtn: 'Start Input',
-        ocrManualWarning1: '⚠️ The analyzed board seems to have rule violations or no unique solution.',
+        ocrManualWarning1: 'The analyzed board seems to have rule violations or no unique solution.',
         ocrManualWarning2: 'Tap the incorrect numbers to fix them!',
         ocrManualPlayBtn: 'PLAY (Re-verify & Start)'
     }
@@ -227,7 +227,10 @@ const btnRedo = document.getElementById('btn-redo');
 // ===== パズル生成 =====
 
 function initGame(difficulty) {
-
+    if (!difficulty) {
+        console.warn('initGame called without difficulty. Skipping generation.');
+        return;
+    }
 
     // 選択された難易度をローカルストレージに保存
     localStorage.setItem('sudoku-difficulty', difficulty);
@@ -869,7 +872,7 @@ btnRedo.addEventListener('click', () => redo());
 // ===== ゲーム開始 =====
 
 buildBoard();
-const savedDifficulty = localStorage.getItem('sudoku-difficulty') || 'hard';
+const savedDifficulty = localStorage.getItem('sudoku-difficulty') || 'easy';
 initGame(savedDifficulty);
 
 // ============================================================================
@@ -936,42 +939,38 @@ function loadOcrLibraries() {
 
 // OCRモーダルの開閉
 btnOcrOpen.addEventListener('click', async () => {
+    // 1. まず即座にモーダルを表示する
     ocrModal.style.display = 'flex';
     document.getElementById('ocr-main-modal').querySelector('h2').textContent = t('ocrTitle');
     uploadZone.querySelectorAll('p')[0].textContent = t('ocrDropText');
     uploadZone.querySelectorAll('p')[1].textContent = t('ocrClickText');
 
-    // UIの初期表示制御 (ローディング中は全非表示)
+    // UIの初期表示制御
     document.getElementById('ocr-loading-spinner').style.display = 'flex';
     uploadZone.style.display = 'none';
     document.querySelector('.ocr-canvas-container').style.display = 'none';
     document.querySelector('.ocr-progress-container').style.display = 'none';
     hideAllOcrStates();
 
-    try {
-        await loadOcrLibraries();
-        document.getElementById('ocr-loading-spinner').style.display = 'none';
+    // 常にまっさらな状態からスタートさせる
+    uploadedImage = null;
+    fileInput.value = '';
 
-        uploadZone.style.display = 'block'; // 常にアップロードエリアは表示
-        ocrStatus.textContent = '';
-        hideAllOcrStates(); // モーダル開いた直後で画像がなければパネルは全て隠す
-
-        // 常にまっさらな状態からスタートさせる
-        uploadedImage = null;
-        fileInput.value = '';
-        document.querySelector('.ocr-canvas-container').style.display = 'none';
-
-    } catch (err) {
-        alert("OCRライブラリの読み込みに失敗しました。ネットワークを確認してください。");
-        ocrModal.style.display = 'none';
-        return;
-    }
-
-    // Document elements for the correction modal
+    // Document elements for the correction modal (ここも先に翻訳を反映)
     document.querySelector('.ocr-correction-title-text').textContent = t('ocrCorrectionTitle');
     document.querySelector('.ocr-correction-box p').textContent = t('ocrCorrectionDesc');
     document.getElementById('modal-btn-submit').textContent = t('ocrCorrectionSubmit');
     document.getElementById('modal-btn-skip').textContent = t('ocrCorrectionSkip');
+
+    // 2. バックグラウンドでライブラリをロードする
+    try {
+        await loadOcrLibraries();
+        document.getElementById('ocr-loading-spinner').style.display = 'none';
+        uploadZone.style.display = 'block';
+    } catch (err) {
+        alert("OCRライブラリの読み込みに失敗しました。ネットワークを確認してください。");
+        ocrModal.style.display = 'none';
+    }
 });
 
 btnOcrClose.addEventListener('click', () => {
@@ -1047,7 +1046,7 @@ function handleFile(file) {
             manualCorrectionCache = [];
 
             // 新レイアウト用の表示切り替え
-            document.querySelector('.ocr-canvas-container').style.display = 'block';
+            document.querySelector('.ocr-canvas-container').style.display = 'flex';
             document.querySelector('.ocr-progress-container').style.display = 'block';
 
             // 画像ロード直後に全自動で解析スタート！(Phase 7)
@@ -1312,12 +1311,53 @@ function hideAllOcrStates() {
         const el = document.getElementById(id);
         if (el) el.style.display = 'none';
     });
+
     const progressContainer = document.querySelector('.ocr-progress-container');
     if (progressContainer) progressContainer.style.display = 'none';
+    const canvasContainer = document.querySelector('.ocr-canvas-container');
+    if (canvasContainer) canvasContainer.style.display = 'none';
     const defaultMsg = document.getElementById('upload-default-msg');
     if (defaultMsg) defaultMsg.style.display = 'block';
     const errorMsg = document.getElementById('upload-error-msg');
     if (errorMsg) errorMsg.style.display = 'none';
+
+    // 右側の表示物リセット
+    const parsedPreview = document.getElementById('ocr-parsed-preview');
+    const manualGrid = document.getElementById('ocr-manual-grid');
+    const previewLabel = document.getElementById('ocr-preview-label');
+    if (parsedPreview) parsedPreview.style.display = 'none';
+    if (manualGrid) manualGrid.style.display = 'none';
+    if (previewLabel) previewLabel.textContent = 'Parsed Grid';
+}
+
+/**
+ * 解析済みの盤面プレビューを生成する
+ */
+function renderParsedPreview(grid1D, unrecognizedIndices = []) {
+    const previewContainer = document.getElementById('ocr-parsed-preview');
+    if (!previewContainer) return;
+    previewContainer.innerHTML = '';
+
+    grid1D.forEach((num, idx) => {
+        const cell = document.createElement('div');
+        cell.className = 'preview-cell';
+
+        // unrecognizedIndicesが数値の配列、または {index: i, ...} のオブジェクト配列である場合の両方を想定
+        const isUnrecognized = unrecognizedIndices.some(item =>
+            (typeof item === 'number' ? item === idx : (item && item.index === idx))
+        );
+
+        if (isUnrecognized) {
+            cell.textContent = '?'; // 半角?に変更
+            cell.classList.add('unrecognized');
+        } else if (num !== 0) {
+            cell.textContent = num;
+        } else {
+            cell.innerHTML = '&nbsp;'; // 空マスが詰まるのを防ぐ
+        }
+
+        previewContainer.appendChild(cell);
+    });
 }
 
 function applyGridToBoardAndCloseModal(grid2D) {
@@ -1389,6 +1429,8 @@ function proceedToValidation(grid1D, autoPlay = false) {
     for (let r = 0; r < 9; r++) {
         grid2D.push(grid1D.slice(r * 9, r * 9 + 9));
     }
+    // 成功時も画像プレビューが見えるようにする
+    document.querySelector('.ocr-canvas-container').style.display = 'flex';
     validateAndApplyOcrGrid(grid2D, autoPlay);
 }
 
@@ -1492,13 +1534,27 @@ async function startOCRAnalysis() {
             progressBar.style.display = 'none';
             ocrStatus.textContent = '';
             document.querySelector('.ocr-progress-container').style.display = 'none';
+            document.querySelector('.ocr-canvas-container').style.display = 'flex';
+
             currentOcrCorrectionQueue = correctionQueue;
             currentGridResult = gridResult;
+
+            // 部分エラー画面でも画像と認識結果を並べて表示
+            document.querySelector('.ocr-canvas-container').style.display = 'flex';
+            document.getElementById('ocr-parsed-preview').style.display = 'grid';
+            document.getElementById('ocr-manual-grid').style.display = 'none';
+            document.getElementById('ocr-preview-label').textContent = 'Parsed Grid';
+
+            renderParsedPreview(gridResult, correctionQueue);
             document.getElementById('ocr-state-partial-fail').style.display = 'flex';
             return;
         }
 
-        // ルートA または D へ
+        // 全て認識成功
+        document.querySelector('.ocr-canvas-container').style.display = 'flex';
+        document.getElementById('ocr-parsed-preview').style.display = 'grid';
+        document.getElementById('ocr-manual-grid').style.display = 'none';
+        renderParsedPreview(gridResult);
         proceedToValidation(gridResult);
 
     } catch (err) {
@@ -1554,6 +1610,13 @@ function validateAndApplyOcrGrid(grid2D, autoPlay = false) {
             // ルートA: 正常終了！ここで「PLAY」を見せる
             finalValidatedGrid = grid2D;
             document.getElementById('ocr-state-success').style.display = 'flex';
+
+            // 画像とプレビューを並べて表示
+            document.querySelector('.ocr-canvas-container').style.display = 'flex';
+            document.getElementById('ocr-parsed-preview').style.display = 'grid';
+            document.getElementById('ocr-manual-grid').style.display = 'none';
+            document.getElementById('ocr-preview-label').textContent = 'Parsed Grid';
+            renderParsedPreview(grid2D.flat());
         }
     } else {
         // ルートD: ルール違反 or 解なし or 複数解 -> 手動グリッドへ
@@ -1562,6 +1625,13 @@ function validateAndApplyOcrGrid(grid2D, autoPlay = false) {
             : '問題が複数解を持つか、一意な解が存在しません。';
 
         document.getElementById('ocr-state-manual-grid').style.display = 'flex';
+        document.querySelector('.ocr-canvas-container').style.display = 'flex';
+
+        // 右側をインタラクティブグリッドに切り替え
+        document.getElementById('ocr-parsed-preview').style.display = 'none';
+        document.getElementById('ocr-manual-grid').style.display = 'grid';
+        document.getElementById('ocr-preview-label').textContent = 'Correction Grid';
+
         renderManualCorrectionGrid(grid2D);
     }
 }
