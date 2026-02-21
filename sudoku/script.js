@@ -200,7 +200,7 @@ let memos = [];            // メモデータ（各セルにSet型）
 let selectedRow = 0;       // 選択中のセル行
 let selectedCol = 0;       // 選択中のセル列
 let memoMode = false;      // メモモード
-let currentDifficulty = 'hard';
+
 let lastInputNumber = 0;   // 直近入力数字（ハイライト用）
 let currentTechnique = ''; // 現在のパズルの最高難易度テクニック
 let lastActionWasRocket = false; // ロケットボタンの連続押下判定用
@@ -227,7 +227,7 @@ const btnRedo = document.getElementById('btn-redo');
 // ===== パズル生成 =====
 
 function initGame(difficulty) {
-    currentDifficulty = difficulty;
+
 
     // 選択された難易度をローカルストレージに保存
     localStorage.setItem('sudoku-difficulty', difficulty);
@@ -883,7 +883,7 @@ const ocrModal = document.getElementById('ocr-main-modal');
 const uploadZone = document.getElementById('upload-zone');
 const fileInput = document.getElementById('file-input');
 const mainCanvas = document.getElementById('main-canvas');
-const cellsContainer = document.getElementById('cells-container');
+
 const ocrStatus = document.getElementById('ocr-status');
 const progressBar = document.getElementById('ocr-progress-bar');
 const progressFill = document.getElementById('ocr-progress-fill');
@@ -1042,7 +1042,7 @@ function handleFile(file) {
 
             ocrStatus.textContent = t('ocrStatusLoaded');
             progressBar.style.display = 'none';
-            cellsContainer.innerHTML = '';
+
             cellCanvases = [];
             manualCorrectionCache = [];
 
@@ -1136,7 +1136,7 @@ function processImageWithOpenCV() {
 
             let boardMat = src.roi(rect);
 
-            cellsContainer.innerHTML = '';
+            // 81個分のキャンバスを生成してOCR用に保持
             cellCanvases = [];
 
             let cellWidth = boardMat.cols / 9;
@@ -1160,7 +1160,7 @@ function processImageWithOpenCV() {
                     cv.imshow(canvas, processedCell.mat);
                     canvas.dataset.hasDigit = processedCell.hasDigit;
 
-                    cellsContainer.appendChild(canvas);
+
                     cellCanvases.push(canvas);
 
                     processedCell.mat.delete();
@@ -1450,7 +1450,6 @@ async function startOCRAnalysis() {
 
                         if (minMax.maxVal > 0.95) {
                             matchedNumber = cache.digit;
-                            console.log(`Matched cached digit ${matchedNumber} with confidence ${minMax.maxVal}`);
                             result.delete();
                             break;
                         }
@@ -1515,10 +1514,13 @@ async function startOCRAnalysis() {
  */
 function validateAndApplyOcrGrid(grid2D, autoPlay = false) {
     let isRuleValid = true;
+    let givenCount = 0;
+
     for (let r = 0; r < 9; r++) {
         for (let c = 0; c < 9; c++) {
             const num = grid2D[r][c];
             if (num !== 0) {
+                givenCount++;
                 grid2D[r][c] = 0;
                 if (!SudokuLogicalSolver.isValid(grid2D, r, c, num)) {
                     isRuleValid = false;
@@ -1528,11 +1530,17 @@ function validateAndApplyOcrGrid(grid2D, autoPlay = false) {
         }
     }
 
+    // 数独が唯一解を持つための数学的最小ヒント数は17
+    if (givenCount < 17) {
+        isRuleValid = false;
+    }
+
     let isSolvable = false;
     if (isRuleValid) {
         const gridCopy = grid2D.map(row => [...row]);
-        const solutionsCount = SudokuLogicalSolver.countSolutions(gridCopy, 1);
-        isSolvable = (solutionsCount === 1); // 複数解も弾き、唯一解のみを受け入れる
+        // 解が2個以上見つかった時点で停止させる（ limit = 2 ）
+        const solutionsCount = SudokuLogicalSolver.countSolutions(gridCopy, 2);
+        isSolvable = (solutionsCount === 1); // 唯一解のみを受け入れる
     }
 
     progressBar.style.display = 'none';
