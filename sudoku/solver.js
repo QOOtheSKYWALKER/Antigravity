@@ -72,10 +72,14 @@ class SudokuLogicalSolver {
 
     /**
      * メインの解決ループ
+     * @param {string} [maxDifficulty='hard'] 許容する最高難易度（指定された難易度以上のテクニックは使用しない）
      * @returns {Object} { solved: boolean, difficulty: string, logicLog: Array }
      */
-    solve() {
+    solve(maxDifficulty = 'hard') {
         let changed = true;
+        const rank = { 'basic': 1, 'easy': 2, 'medium': 3, 'hard': 4 };
+        const maxRank = rank[maxDifficulty] || 4;
+
         while (changed && !this.isSolved()) {
             changed = false;
 
@@ -83,21 +87,27 @@ class SudokuLogicalSolver {
             if (this.applyNakedSingle()) { changed = true; continue; }
             if (this.applyHiddenSingle()) { changed = true; continue; }
 
-            // 2. Easy (Pairs, Locked Candidates)
-            if (this.applyNakedPair()) { changed = true; continue; }
-            if (this.applyLockedCandidates()) { changed = true; continue; }
+            // 2. Easy (Locked Candidates)
+            if (maxRank >= 2) {
+                if (this.applyLockedCandidates()) { changed = true; continue; }
+            }
 
-            // 3. Medium (Hidden Pairs, Triples)
-            if (this.applyHiddenPair()) { changed = true; continue; }
-            if (this.applyNakedTriple()) { changed = true; continue; }
-            if (this.applyHiddenTriple()) { changed = true; continue; }
+            // 3. Medium (Pairs, Triples)
+            if (maxRank >= 3) {
+                if (this.applyNakedPair()) { changed = true; continue; }
+                if (this.applyHiddenPair()) { changed = true; continue; }
+                if (this.applyNakedTriple()) { changed = true; continue; }
+                if (this.applyHiddenTriple()) { changed = true; continue; }
+            }
 
             // 4. Hard (Fish, Wings, Skyscraper)
-            if (this.applyXWing()) { changed = true; continue; }
-            if (this.applyYWing()) { changed = true; continue; }
-            if (this.applySwordfish()) { changed = true; continue; }
-            if (this.applySkyscraper()) { changed = true; continue; }
-            if (this.applyWWing()) { changed = true; continue; }
+            if (maxRank >= 4) {
+                if (this.applyXWing()) { changed = true; continue; }
+                if (this.applyYWing()) { changed = true; continue; }
+                if (this.applySwordfish()) { changed = true; continue; }
+                if (this.applySkyscraper()) { changed = true; continue; }
+                if (this.applyWWing()) { changed = true; continue; }
+            }
         }
 
         const diffInfo = this.getDifficultyInfo();
@@ -447,16 +457,19 @@ class SudokuLogicalSolver {
     }
     /**
      * Locked Candidates (Intersection Removal)
-     * Pointing: ブロック内で数字が特定の行列に限定 -> 行列の他ブロックから削除
-     * Claiming: 行列内で数字が特定のブロックに限定 -> ブロックの他セルから削除
+    /**
+     * Locked Candidates
+     * Pointing: ブロック内で特定の数字が入る候補セルが、すべて同じ行（または列）に存在する場合、
+     *           その行（または列）の「他のブロック」からは、その数字の候補を削除できる。
+     * Claiming: 行（または列）内で特定の数字が入る候補セルが、すべて同じブロック内に存在する場合、
+     *           そのブロックの「他の行（または列）」からは、その数字の候補を削除できる。
      */
     applyLockedCandidates() {
         let changed = false;
 
-        // 1. Pointing (Block -> Row/Col)
+        // --- 1. Pointing (Block -> Row/Col) ---
         for (let br = 0; br < 3; br++) {
             for (let bc = 0; bc < 3; bc++) {
-                // 各ブロックについて
                 for (let num = 1; num <= 9; num++) {
                     const positions = [];
                     for (let r = br * 3; r < br * 3 + 3; r++) {
@@ -467,38 +480,32 @@ class SudokuLogicalSolver {
                         }
                     }
 
-                    if (positions.length === 0) continue;
+                    if (positions.length < 2) continue; // 2つか3つ必要
 
-                    // 全ての候補が同じ行にあるか
+                    // 全て同じ行か？
                     const allInRow = positions.every(p => p.r === positions[0].r);
                     if (allInRow) {
                         const r = positions[0].r;
-                        // その行の他のブロックから削除
                         for (let c = 0; c < 9; c++) {
-                            // 現在のブロック外
-                            if (Math.floor(c / 3) !== bc) {
-                                if (this.grid[r][c] === 0 && this.candidates[r][c].has(num)) {
-                                    this.candidates[r][c].delete(num);
-                                    changed = true;
-                                    this.difficultyLog.push({ technique: 'Locked Candidates (Pointing)', r, c, num });
-                                }
+                            // 現在のブロックの外側で候補を消す
+                            if (Math.floor(c / 3) !== bc && this.grid[r][c] === 0 && this.candidates[r][c].has(num)) {
+                                this.candidates[r][c].delete(num);
+                                changed = true;
+                                this.difficultyLog.push({ technique: 'Locked Candidates (Pointing)', r: r, c: c, num });
                             }
                         }
                     }
 
-                    // 全ての候補が同じ列にあるか
+                    // 全て同じ列か？
                     const allInCol = positions.every(p => p.c === positions[0].c);
                     if (allInCol) {
                         const c = positions[0].c;
-                        // その列の他のブロックから削除
                         for (let r = 0; r < 9; r++) {
-                            // 現在のブロック外
-                            if (Math.floor(r / 3) !== br) {
-                                if (this.grid[r][c] === 0 && this.candidates[r][c].has(num)) {
-                                    this.candidates[r][c].delete(num);
-                                    changed = true;
-                                    this.difficultyLog.push({ technique: 'Locked Candidates (Pointing)', r, c, num });
-                                }
+                            // 現在のブロックの外側で候補を消す
+                            if (Math.floor(r / 3) !== br && this.grid[r][c] === 0 && this.candidates[r][c].has(num)) {
+                                this.candidates[r][c].delete(num);
+                                changed = true;
+                                this.difficultyLog.push({ technique: 'Locked Candidates (Pointing)', r: r, c: c, num });
                             }
                         }
                     }
@@ -506,51 +513,46 @@ class SudokuLogicalSolver {
             }
         }
 
-        // 2. Claiming (Row/Col -> Block)
-        // Rows
-        for (let r = 0; r < 9; r++) {
-            for (let num = 1; num <= 9; num++) {
+        // --- 2. Claiming (Row/Col -> Block) ---
+        for (let num = 1; num <= 9; num++) {
+            // Rows -> Block
+            for (let r = 0; r < 9; r++) {
                 const positions = [];
                 for (let c = 0; c < 9; c++) {
                     if (this.grid[r][c] === 0 && this.candidates[r][c].has(num)) {
-                        positions.push({ c, r }); // r is constant
+                        positions.push({ r, c });
                     }
                 }
-                if (positions.length === 0) continue;
+                if (positions.length < 2) continue;
 
-                // 全て同じブロックか
                 const firstBlockCol = Math.floor(positions[0].c / 3);
                 const allInBlock = positions.every(p => Math.floor(p.c / 3) === firstBlockCol);
 
                 if (allInBlock) {
                     const br = Math.floor(r / 3);
                     const bc = firstBlockCol;
-                    // そのブロック内の、この行以外のセルから削除
                     for (let rr = br * 3; rr < br * 3 + 3; rr++) {
                         for (let cc = bc * 3; cc < bc * 3 + 3; cc++) {
-                            if (rr !== r) { // この行以外
-                                if (this.grid[rr][cc] === 0 && this.candidates[rr][cc].has(num)) {
-                                    this.candidates[rr][cc].delete(num);
-                                    changed = true;
-                                    this.difficultyLog.push({ technique: 'Locked Candidates (Claiming)', r: rr, c: cc, num });
-                                }
+                            // この行自体は除外して、ブロック内の他のセルから消す
+                            if (rr !== r && this.grid[rr][cc] === 0 && this.candidates[rr][cc].has(num)) {
+                                this.candidates[rr][cc].delete(num);
+                                changed = true;
+                                this.difficultyLog.push({ technique: 'Locked Candidates (Claiming)', r: rr, c: cc, num });
                             }
                         }
                     }
                 }
             }
-        }
 
-        // Cols
-        for (let c = 0; c < 9; c++) {
-            for (let num = 1; num <= 9; num++) {
+            // Cols -> Block
+            for (let c = 0; c < 9; c++) {
                 const positions = [];
                 for (let r = 0; r < 9; r++) {
                     if (this.grid[r][c] === 0 && this.candidates[r][c].has(num)) {
-                        positions.push({ r, c }); // c is constant
+                        positions.push({ r, c });
                     }
                 }
-                if (positions.length === 0) continue;
+                if (positions.length < 2) continue;
 
                 const firstBlockRow = Math.floor(positions[0].r / 3);
                 const allInBlock = positions.every(p => Math.floor(p.r / 3) === firstBlockRow);
@@ -560,12 +562,11 @@ class SudokuLogicalSolver {
                     const bc = Math.floor(c / 3);
                     for (let rr = br * 3; rr < br * 3 + 3; rr++) {
                         for (let cc = bc * 3; cc < bc * 3 + 3; cc++) {
-                            if (cc !== c) { // この列以外
-                                if (this.grid[rr][cc] === 0 && this.candidates[rr][cc].has(num)) {
-                                    this.candidates[rr][cc].delete(num);
-                                    changed = true;
-                                    this.difficultyLog.push({ technique: 'Locked Candidates (Claiming)', r: rr, c: cc, num });
-                                }
+                            // この列自体は除外して、ブロック内の他のセルから消す
+                            if (cc !== c && this.grid[rr][cc] === 0 && this.candidates[rr][cc].has(num)) {
+                                this.candidates[rr][cc].delete(num);
+                                changed = true;
+                                this.difficultyLog.push({ technique: 'Locked Candidates (Claiming)', r: rr, c: cc, num });
                             }
                         }
                     }
@@ -575,6 +576,7 @@ class SudokuLogicalSolver {
 
         return changed;
     }
+
     /**
      * X-Wing
      * ある数字が、2つの行においてそれぞれ同じ2つの列にしか候補がない場合（あるいはその逆）、
@@ -1220,24 +1222,9 @@ SudokuLogicalSolver.generatePuzzle = function (difficulty) {
         const solution = grid.map(r => [...r]);
         const puzzle = grid.map(r => [...r]);
 
-        // 削る順番の決定（easy, medium は線対称、それ以外は完全ランダム）
-        let shuffledCells = [];
-        if (difficulty === 'easy' || difficulty === 'medium') {
-            const groups = [];
-            for (let r = 0; r < 9; r++) {
-                for (let c = 0; c < 4; c++) {
-                    groups.push([[r, c], [r, 8 - c]]);
-                }
-                groups.push([[r, 4]]); // センターライン
-            }
-            const shuffledGroups = SudokuLogicalSolver.shuffleArray(groups);
-            shuffledGroups.forEach(group => {
-                group.forEach(cell => shuffledCells.push(cell));
-            });
-        } else {
-            const cells = Array.from({ length: 81 }, (_, i) => [Math.floor(i / 9), i % 9]);
-            shuffledCells = SudokuLogicalSolver.shuffleArray(cells);
-        }
+        // 削る順番の決定（完全ランダム）
+        const cells = Array.from({ length: 81 }, (_, i) => [Math.floor(i / 9), i % 9]);
+        const shuffledCells = SudokuLogicalSolver.shuffleArray(cells);
 
         for (const [r, c] of shuffledCells) {
             const val = puzzle[r][c];
@@ -1248,12 +1235,13 @@ SudokuLogicalSolver.generatePuzzle = function (difficulty) {
                 puzzle[r][c] = val; // 複数解になったら戻す
             } else {
                 // 目標難易度を超えていないかチェック
+                // 指定された難易度「まで」のテクニックしか使わないソルバーで判定する
                 const solver = new SudokuLogicalSolver(puzzle);
-                const res = solver.solve();
+                const res = solver.solve(difficulty);
                 const rank = diffRank[res.solved ? res.difficulty : 'unsolvable'] || 5;
 
-                if (rank > targetRank) {
-                    puzzle[r][c] = val; // 目標より難しくなったなら戻す
+                if (rank > targetRank || !res.solved) {
+                    puzzle[r][c] = val; // 目標のテクニック群だけで解けないなら戻す
                 }
             }
         }

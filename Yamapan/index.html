@@ -4,8 +4,8 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>ヤマパン シール点数計算</title>
-    <meta name="description" content="ヤマザキ春のパンまつりの点数シールを画像から読み取り、合計点数を自動計算するWebアプリ">
+    <title>ヤマパン シール点数計算 v3</title>
+    <meta name="description" content="台紙マトリクスと画像一致度(OpenCV.js)を用いたシール自動計算アプリ">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link
@@ -16,42 +16,49 @@
 
 <body>
     <div class="container">
-
         <!-- ヘッダー -->
         <header class="header">
             <span class="header-icon">🍞</span>
-            <h1>ヤマパン シール計算</h1>
-            <p>シールを撮影して点数を自動カウント</p>
+            <h1>ヤマパン シール計算 <span
+                    style="font-size: 0.5em; background: var(--accent-pink-dark); color: white; padding: 2px 6px; border-radius: 4px; vertical-align: middle;">v3</span>
+            </h1>
+            <p>台紙マトリクス＆画像一致度で自動カウント</p>
         </header>
 
-        <!-- 画像入力カード -->
-        <section class="card" id="input-card">
-            <div class="card-title">
-                <span class="icon">📷</span>
-                シール画像を読み込む
-            </div>
-            <div class="drop-zone" id="drop-zone">
-                <span class="drop-zone-icon">📸</span>
-                <p class="drop-zone-text">
-                    <strong>タップして画像を選択</strong><br>
-                    またはここにドラッグ＆ドロップ
-                </p>
-                <p class="drop-zone-hint">JPG, PNG対応</p>
-                <input type="file" id="file-input" accept="image/*" multiple>
-            </div>
+        <!-- 機能タブ -->
+        <div class="tabs">
+            <button class="tab-btn active" id="tab-scan">スキャン</button>
+            <button class="tab-btn" id="tab-templates">参考画像(辞書)管理</button>
+            <button class="tab-btn" id="tab-history">履歴</button>
+        </div>
 
-            <!-- 画像プレビュー -->
-            <div class="preview-area" id="preview-area">
-                <div class="preview-container">
-                    <img id="preview-image" src="" alt="プレビュー">
+        <div id="view-scan" class="view-section active">
+            <!-- 画像入力カード -->
+            <section class="card" id="input-card">
+                <div class="card-title"><span class="icon">📷</span>シール台紙の画像を読み込む</div>
+                <div class="drop-zone" id="drop-zone">
+                    <span class="drop-zone-icon">📸</span>
+                    <p class="drop-zone-text"><strong>タップして画像を選択</strong><br>またはここにドラッグ＆ドロップ</p>
+                    <input type="file" id="file-input" accept="image/*" multiple>
                 </div>
-                <p class="preview-filename" id="preview-filename"></p>
-            </div>
+            </section>
 
-            <!-- OCR実行ボタン -->
-            <button class="btn btn-primary" id="ocr-button" disabled>
-                🔍 シールを読み取る
-            </button>
+            <!-- 四隅コンテナ -->
+            <section class="card hidden" id="corners-card">
+                <div class="card-title">
+                    <span class="icon">📐</span>
+                    1. 台紙の四隅を指定してください
+                </div>
+                <p style="font-size: 0.8rem; color: var(--text-secondary); margin-bottom: 12px;">
+                    画像の角にある赤い点（1〜4）をドラッグして、シールを貼る台紙の枠（マトリクス）の四隅に合わせてください。
+                </p>
+                <div class="canvas-container">
+                    <canvas id="image-canvas"></canvas>
+                </div>
+                <button class="btn btn-primary mt-16" id="analyze-button">
+                    🔍 このマトリクスを解析する
+                </button>
+            </section>
 
             <!-- プログレスバー -->
             <div class="progress-section" id="progress-section">
@@ -60,85 +67,94 @@
                 </div>
                 <p class="progress-text" id="progress-text">準備中...</p>
             </div>
-        </section>
 
-        <!-- OCR結果カード -->
-        <section class="card result-section" id="result-section">
-            <div class="card-title">
-                <span class="icon">🔎</span>
-                認識結果
-            </div>
+            <!-- 解析結果カード -->
+            <section class="card hidden" id="result-card">
+                <div class="card-title"><span class="icon">🔎</span>マトリクス解析結果</div>
 
-            <div class="ocr-text-box" id="ocr-text-box">-</div>
-
-            <div class="detected-score" id="detected-score">
-                <span class="detected-score-label">検出された点数:</span>
-                <span class="detected-score-value" id="detected-score-value">-</span>
-                <span class="detected-score-unit">点</span>
-            </div>
-
-            <div class="manual-input-section">
-                <p class="card-title" style="margin-bottom: 8px;">
-                    <span class="icon">✏️</span>
-                    点数を修正・追加
-                </p>
-                <div class="manual-input-row">
-                    <select class="score-select" id="score-select">
-                        <option value="0.5">0.5 点</option>
-                        <option value="1" selected>1 点</option>
-                        <option value="1.5">1.5 点</option>
-                        <option value="2">2 点</option>
-                        <option value="2.5">2.5 点</option>
-                        <option value="3">3 点</option>
-                    </select>
-                    <button class="btn btn-secondary" id="add-score-button">追加</button>
+                <div id="unregistered-warning" class="hidden"
+                    style="background: rgba(251, 191, 36, 0.1); border: 1px solid var(--accent-gold); padding: 12px; border-radius: 8px; margin-bottom: 16px;">
+                    <p style="color: var(--accent-gold); font-size: 0.85rem; margin-bottom: 8px;">
+                        ⚠️ 参考画像（辞書）が未登録のため、自動判定できませんでした。
+                    </p>
+                    <button class="btn btn-secondary w-100" id="go-to-template-btn"
+                        style="border-color: var(--accent-gold); color: var(--accent-gold);">
+                        参考画像を登録する
+                    </button>
                 </div>
-            </div>
-        </section>
 
-        <!-- 手動追加カード（常時表示） -->
-        <section class="card" id="manual-card">
-            <div class="card-title">
-                <span class="icon">✏️</span>
-                手動で点数を追加
-            </div>
-            <div class="manual-input-row">
-                <select class="score-select" id="manual-score-select">
-                    <option value="0.5">0.5 点</option>
-                    <option value="1" selected>1 点</option>
-                    <option value="1.5">1.5 点</option>
-                    <option value="2">2 点</option>
-                    <option value="2.5">2.5 点</option>
-                    <option value="3">3 点</option>
-                </select>
-                <button class="btn btn-secondary" id="manual-add-button">追加</button>
-            </div>
-        </section>
+                <div class="matrix-grid-container">
+                    <div class="matrix-grid" id="matrix-grid">
+                        <!-- 30マスのプレビューがJSで生成されます -->
+                    </div>
+                </div>
 
-        <!-- シール一覧カード -->
-        <section class="card" id="sticker-list-card">
-            <div class="card-title">
-                <span class="icon">🎫</span>
-                シール一覧
-                <span id="sticker-count"
-                    style="margin-left: auto; font-size: 0.75rem; color: var(--text-muted);">0枚</span>
-            </div>
-            <ul class="sticker-list" id="sticker-list">
-                <li class="empty-list" id="empty-list">
-                    <span class="empty-list-icon">📭</span>
-                    まだシールがありません
-                </li>
-            </ul>
-            <div class="list-actions" id="list-actions" style="display: none;">
-                <button class="btn btn-danger" id="clear-all-button">🗑️ 全て削除</button>
-            </div>
-        </section>
+                <div class="detected-score mt-16" id="detected-score">
+                    <!-- 検出された合計点数が表示されます -->
+                </div>
 
-        <!-- 合計カード -->
+                <button class="btn btn-primary" id="confirm-add-button" style="margin-top: 16px;">
+                    ✅ この結果を履歴に追加する
+                </button>
+            </section>
+        </div>
+
+        <div id="view-templates" class="view-section hidden">
+            <section class="card">
+                <div class="card-title"><span class="icon">📚</span>参考画像の登録（辞書）</div>
+                <p style="font-size: 0.8rem; color: var(--text-secondary); margin-bottom: 16px;">
+                    各点数のシールを学習させます。スキャンしたマトリクスから、該当する点数の枠をタップして登録してください。<br>
+                    ※一度登録すれば次回から自動判定されます。
+                </p>
+
+                <div id="template-list" class="template-list">
+                    <!-- 0.5, 1, 1.5, ... の登録スロットがJSで生成されます -->
+                </div>
+
+                <div class="list-actions">
+                    <button class="btn btn-danger" id="clear-templates-btn">辞書をリセットする</button>
+                </div>
+            </section>
+        </div>
+
+        <div id="view-history" class="view-section hidden">
+            <!-- シール一覧カード -->
+            <section class="card" id="sticker-list-card">
+                <div class="card-title">
+                    <span class="icon">🎫</span>
+                    スキャン履歴
+                    <span id="sticker-count"
+                        style="margin-left: auto; font-size: 0.75rem; color: var(--text-muted);">0枚</span>
+                </div>
+                <div class="manual-input-section" style="margin-bottom: 16px;">
+                    <div class="manual-input-row">
+                        <select class="score-select" id="manual-score-select">
+                            <option value="0.5">0.5 点</option>
+                            <option value="1" selected>1 点</option>
+                            <option value="1.5">1.5 点</option>
+                            <option value="2">2 点</option>
+                            <option value="2.5">2.5 点</option>
+                            <option value="3">3 点</option>
+                        </select>
+                        <button class="btn btn-secondary" id="manual-add-button">手動追加</button>
+                    </div>
+                </div>
+                <ul class="sticker-list" id="sticker-list">
+                    <li class="empty-list" id="empty-list">
+                        <span class="empty-list-icon">📭</span>まだ履歴がありません
+                    </li>
+                </ul>
+                <div class="list-actions" id="list-actions" style="display: none;">
+                    <button class="btn btn-danger" id="clear-all-button">🗑️ 履歴を全て削除</button>
+                </div>
+            </section>
+        </div>
+
+        <!-- 合計カード（常時表示） -->
         <section class="card total-card" id="total-card">
             <div class="total-content">
                 <div>
-                    <div class="total-label">合計点数</div>
+                    <div class="total-label">履歴の合計点数</div>
                     <div class="total-remaining" id="total-remaining">あと 30 点でお皿と交換！</div>
                 </div>
                 <div>
@@ -158,11 +174,33 @@
 
     </div>
 
+    <!-- テンプレート選択用モーダル -->
+    <div id="template-modal" class="modal hidden">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3><span id="modal-target-score"></span> の画像を登録</h3>
+                <button class="btn-icon" id="close-modal-btn">✕</button>
+            </div>
+            <p style="font-size: 0.8rem; color: var(--text-secondary); margin-bottom: 12px;">
+                以下のスキャンされた枠の中から、該当する点数のシールをタップしてください。
+            </p>
+            <div class="matrix-grid" id="modal-matrix-grid"></div>
+        </div>
+    </div>
+
     <!-- 紙吹雪コンテナ -->
     <div class="confetti-container" id="confetti-container"></div>
 
-    <!-- Tesseract.js v5 CDN -->
-    <script src="https://unpkg.com/tesseract.js@5/dist/tesseract.min.js"></script>
+    <!-- ローディングオーバーレイ -->
+    <div id="opencv-loading"
+        style="position: fixed; inset: 0; background: var(--bg-primary); z-index: 9999; display: flex; flex-direction: column; align-items: center; justify-content: center;">
+        <div class="spinner"></div>
+        <p style="margin-top: 16px; font-weight: bold; color: var(--accent-pink);">OpenCV.js を読み込み中...</p>
+    </div>
+
+    <!-- OpenCV.js CDN -->
+    <script async src="https://cdn.jsdelivr.net/npm/@techstark/opencv-js@4.12.0-release.1/dist/opencv.js"
+        onload="onOpenCvReady();" type="text/javascript"></script>
     <script src="script.js"></script>
 </body>
 

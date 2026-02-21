@@ -1,512 +1,701 @@
 /**
- * ヤマパン シール点数計算アプリ
- * メインスクリプト - 画像前処理・OCR処理・シール管理・合計計算
+ * ヤマパン シール点数計算アプリ v3
+ * OpenCV.jsを使用した台紙マトリクス・テンプレートマッチング方式
  */
 
 // =====================================
-// 定数定義
+// 定数と状態管理
 // =====================================
-
-/** 有効な点数のリスト */
 const VALID_SCORES = [0.5, 1, 1.5, 2, 2.5, 3];
-
-/** お皿交換に必要な点数 */
 const GOAL_POINTS = 30;
+const STORAGE_KEY_STICKERS = 'yamapan_v3_stickers';
+const STORAGE_KEY_TEMPLATES = 'yamapan_v3_templates';
 
-/** LocalStorage キー */
-const STORAGE_KEY = 'yamapan_stickers';
-
-// =====================================
-// 状態管理
-// =====================================
-
-/** シールデータの配列 [{id, score, method, timestamp}] */
 let stickers = [];
+let templates = {}; // { '0.5': rawDataURL, ... }
+let currentImage = null; // HTMLImageElement
+let currentCells = []; // 30個のセルのデータURL
+let currentDetectedResults = []; // 解析結果 { score, dataUrl }
 
-/** 現在読み込まれた画像ファイル */
-let currentImageFile = null;
-
-/** OCR処理中フラグ */
-let isProcessing = false;
-
-/** OCRで検出された点数リスト（一括追加用） */
-let detectedScores = [];
+// 四隅の座標状態（Canvas上の座標）
+const defaultCorners = [
+    { x: 50, y: 50 },          // 左上
+    { x: 350, y: 50 },         // 右上
+    { x: 350, y: 450 },        // 右下
+    { x: 50, y: 450 }          // 左下
+];
+let corners = [...defaultCorners];
+let draggingPoint = -1;
+let canvasScale = 1;
 
 // =====================================
-// DOM要素の取得
+// DOM要素
 // =====================================
-
 const dom = {
+    // Tabs
+    tabScan: document.getElementById('tab-scan'),
+    tabTemplates: document.getElementById('tab-templates'),
+    tabHistory: document.getElementById('tab-history'),
+    viewScan: document.getElementById('view-scan'),
+    viewTemplates: document.getElementById('view-templates'),
+    viewHistory: document.getElementById('view-history'),
+
+    // Scan View
     dropZone: document.getElementById('drop-zone'),
     fileInput: document.getElementById('file-input'),
-    previewArea: document.getElementById('preview-area'),
-    previewImage: document.getElementById('preview-image'),
-    previewFilename: document.getElementById('preview-filename'),
-    ocrButton: document.getElementById('ocr-button'),
+    inputCard: document.getElementById('input-card'),
+    cornersCard: document.getElementById('corners-card'),
+    canvas: document.getElementById('image-canvas'),
+    analyzeBtn: document.getElementById('analyze-button'),
     progressSection: document.getElementById('progress-section'),
     progressBar: document.getElementById('progress-bar'),
     progressText: document.getElementById('progress-text'),
-    resultSection: document.getElementById('result-section'),
-    ocrTextBox: document.getElementById('ocr-text-box'),
-    detectedScoreValue: document.getElementById('detected-score-value'),
-    scoreSelect: document.getElementById('score-select'),
-    addScoreButton: document.getElementById('add-score-button'),
-    manualScoreSelect: document.getElementById('manual-score-select'),
-    manualAddButton: document.getElementById('manual-add-button'),
-    stickerList: document.getElementById('sticker-list'),
+    resultCard: document.getElementById('result-card'),
+    matrixGrid: document.getElementById('matrix-grid'),
+    unregisteredWarning: document.getElementById('unregistered-warning'),
+    goToTemplateBtn: document.getElementById('go-to-template-btn'),
+    detectedScoreDiv: document.getElementById('detected-score'),
+    confirmAddBtn: document.getElementById('confirm-add-button'),
+
+    // Templates View
+    templateList: document.getElementById('template-list'),
+    clearTemplatesBtn: document.getElementById('clear-templates-btn'),
+
+    // History View
     stickerCount: document.getElementById('sticker-count'),
+    stickerList: document.getElementById('sticker-list'),
     emptyList: document.getElementById('empty-list'),
     listActions: document.getElementById('list-actions'),
-    clearAllButton: document.getElementById('clear-all-button'),
+    clearAllBtn: document.getElementById('clear-all-button'),
+    manualScoreSelect: document.getElementById('manual-score-select'),
+    manualAddBtn: document.getElementById('manual-add-button'),
+
+    // Total Card
     totalValue: document.getElementById('total-value'),
     totalRemaining: document.getElementById('total-remaining'),
     goalProgressFill: document.getElementById('goal-progress-fill'),
     celebration: document.getElementById('celebration'),
     confettiContainer: document.getElementById('confetti-container'),
+
+    // Modal
+    modal: document.getElementById('template-modal'),
+    modalTargetScore: document.getElementById('modal-target-score'),
+    closeModalBtn: document.getElementById('close-modal-btn'),
+    modalMatrixGrid: document.getElementById('modal-matrix-grid')
 };
 
-// =====================================
-// 初期化
-// =====================================
+let currentAssigningScore = null;
 
+// =====================================
+// 初期化・イベントリスナー
+// =====================================
 document.addEventListener('DOMContentLoaded', () => {
-    loadStickers();
-    setupEventListeners();
+    loadData();
+    setupTabs();
+    setupFileInput();
+    setupCanvasEvents();
+    setupButtons();
+    renderTemplateList();
     renderStickerList();
     updateTotal();
 });
 
-// =====================================
-// イベントリスナーの設定
-// =====================================
+// OpenCVの準備完了コールバック
+function onOpenCvReady() {
+    cv['onRuntimeInitialized'] = () => {
+        document.getElementById('opencv-loading').classList.add('hidden');
+        console.log('OpenCV.js is ready.');
+    };
+}
 
-function setupEventListeners() {
-    // ドロップゾーン クリック → ファイル選択ダイアログ
-    dom.dropZone.addEventListener('click', () => {
-        dom.fileInput.click();
+function setupTabs() {
+    const tabs = [
+        { btn: dom.tabScan, view: dom.viewScan },
+        { btn: dom.tabTemplates, view: dom.viewTemplates },
+        { btn: dom.tabHistory, view: dom.viewHistory }
+    ];
+
+    tabs.forEach(tab => {
+        tab.btn.addEventListener('click', () => {
+            tabs.forEach(t => {
+                t.btn.classList.remove('active');
+                t.view.classList.add('hidden');
+            });
+            tab.btn.classList.add('active');
+            tab.view.classList.remove('hidden');
+            if (tab.btn === dom.tabHistory) renderStickerList();
+            if (tab.btn === dom.tabTemplates) renderTemplateList();
+        });
     });
+}
 
-    // ファイル選択
-    dom.fileInput.addEventListener('change', (e) => {
-        if (e.target.files.length > 0) {
-            handleFileSelect(e.target.files[0]);
-        }
-    });
-
-    // ドラッグ&ドロップ
-    dom.dropZone.addEventListener('dragover', (e) => {
-        e.preventDefault();
-        dom.dropZone.classList.add('drag-over');
-    });
-
-    dom.dropZone.addEventListener('dragleave', () => {
-        dom.dropZone.classList.remove('drag-over');
-    });
-
+function setupFileInput() {
+    dom.dropZone.addEventListener('click', () => dom.fileInput.click());
+    dom.dropZone.addEventListener('dragover', (e) => { e.preventDefault(); dom.dropZone.classList.add('drag-over'); });
+    dom.dropZone.addEventListener('dragleave', () => dom.dropZone.classList.remove('drag-over'));
     dom.dropZone.addEventListener('drop', (e) => {
-        e.preventDefault();
-        dom.dropZone.classList.remove('drag-over');
-        if (e.dataTransfer.files.length > 0) {
-            handleFileSelect(e.dataTransfer.files[0]);
-        }
+        e.preventDefault(); dom.dropZone.classList.remove('drag-over');
+        if (e.dataTransfer.files.length) handleImageFile(e.dataTransfer.files[0]);
+    });
+    dom.fileInput.addEventListener('change', (e) => {
+        if (e.target.files.length) handleImageFile(e.target.files[0]);
+    });
+}
+
+function setupButtons() {
+    dom.analyzeBtn.addEventListener('click', analyzeMatrix);
+
+    dom.goToTemplateBtn.addEventListener('click', () => {
+        dom.tabTemplates.click();
     });
 
-    // OCR実行ボタン
-    dom.ocrButton.addEventListener('click', () => {
-        if (currentImageFile && !isProcessing) {
-            runOCR(currentImageFile);
-        }
+    dom.confirmAddBtn.addEventListener('click', () => {
+        if (currentDetectedResults.length === 0) return;
+        currentDetectedResults.forEach(res => {
+            addSticker(res.score, 'マトリクス解析');
+        });
+        dom.tabHistory.click();
+
+        // 解析結果をリセット
+        dom.resultCard.classList.add('hidden');
+        dom.cornersCard.classList.add('hidden');
+        dom.inputCard.style.display = 'block';
+        currentImage = null;
+        currentCells = [];
     });
 
-    // OCR結果からスコア追加
-    dom.addScoreButton.addEventListener('click', () => {
-        const score = parseFloat(dom.scoreSelect.value);
-        addSticker(score, 'OCR');
+    dom.manualAddBtn.addEventListener('click', () => {
+        addSticker(parseFloat(dom.manualScoreSelect.value), '手動');
     });
 
-    // 手動スコア追加
-    dom.manualAddButton.addEventListener('click', () => {
-        const score = parseFloat(dom.manualScoreSelect.value);
-        addSticker(score, '手動');
-    });
-
-    // 全削除
-    dom.clearAllButton.addEventListener('click', () => {
-        if (confirm('全てのシールデータを削除しますか？')) {
+    dom.clearAllBtn.addEventListener('click', () => {
+        if (confirm('履歴を全て削除しますか？')) {
             stickers = [];
-            saveStickers();
+            saveData();
             renderStickerList();
             updateTotal();
         }
     });
+
+    dom.clearTemplatesBtn.addEventListener('click', () => {
+        if (confirm('登録済みの参考画像（辞書）をリセットしますか？')) {
+            templates = {};
+            saveData();
+            renderTemplateList();
+        }
+    });
+
+    dom.closeModalBtn.addEventListener('click', closeModal);
 }
 
 // =====================================
-// 画像読み込み
+// Canvas 四隅の指定ロジック
 // =====================================
-
-/**
- * ファイル選択時の処理
- * @param {File} file - 選択された画像ファイル
- */
-function handleFileSelect(file) {
-    // 画像ファイルか確認
+function handleImageFile(file) {
     if (!file.type.startsWith('image/')) {
-        alert('画像ファイルを選択してください。');
-        return;
+        alert('画像ファイルを選択してください'); return;
     }
-
-    currentImageFile = file;
-
-    // プレビュー表示
     const reader = new FileReader();
     reader.onload = (e) => {
-        dom.previewImage.src = e.target.result;
-        dom.previewArea.classList.add('visible');
-        dom.previewFilename.textContent = file.name;
-        dom.ocrButton.disabled = false;
+        const img = new Image();
+        img.onload = () => {
+            currentImage = img;
+            dom.inputCard.style.display = 'none';
+            dom.cornersCard.classList.remove('hidden');
+            dom.resultCard.classList.add('hidden');
 
-        // 結果セクションを非表示にリセット
-        dom.resultSection.classList.remove('visible');
+            // display: none が解除された後でclientWidthを取得して初期化
+            setTimeout(() => {
+                initCanvas();
+            }, 50);
+        };
+        img.src = e.target.result;
     };
     reader.readAsDataURL(file);
 }
 
-// =====================================
-// 画像前処理（Canvas）
-// =====================================
+function initCanvas() {
+    const canvas = dom.canvas;
+    const ctx = canvas.getContext('2d');
 
-/**
- * 画像をCanvasで前処理し、OCR用に最適化する
- * 赤いシール上の白い数字を読み取りやすくする
- * @param {string} imageUrl - 画像のURL
- * @returns {Promise<string>} 前処理済み画像のdata URL
- */
-function preprocessImage(imageUrl) {
-    return new Promise((resolve, reject) => {
-        const img = new Image();
-        img.crossOrigin = 'anonymous';
-        img.onload = () => {
-            const canvas = document.createElement('canvas');
-            const ctx = canvas.getContext('2d');
+    // 表示用のサイズ調整
+    const maxWidth = dom.cornersCard.clientWidth - 40; // padding分引く
+    let w = currentImage.width;
+    let h = currentImage.height;
 
-            // 画像サイズを適度にリサイズ（大きすぎるとOCRが遅い）
-            const maxDim = 2000;
-            let w = img.width;
-            let h = img.height;
-            if (w > maxDim || h > maxDim) {
-                const scale = maxDim / Math.max(w, h);
-                w = Math.round(w * scale);
-                h = Math.round(h * scale);
-            }
+    if (w > maxWidth) {
+        h = h * (maxWidth / w);
+        w = maxWidth;
+    }
 
-            canvas.width = w;
-            canvas.height = h;
-            ctx.drawImage(img, 0, 0, w, h);
+    canvas.width = w;
+    canvas.height = h;
+    canvasScale = currentImage.width / w;
 
-            // ピクセルデータを取得
-            const imageData = ctx.getImageData(0, 0, w, h);
-            const data = imageData.data;
+    // 四隅の初期位置（画像の端から少し内側）
+    const padding = Math.min(w, h) * 0.1;
+    corners = [
+        { x: padding, y: padding },
+        { x: w - padding, y: padding },
+        { x: w - padding, y: h - padding },
+        { x: padding, y: h - padding }
+    ];
 
-            // 赤いシール上の白い数字を検出するため、
-            // 赤色部分を黒、白い部分をそのまま残す処理をする
-            // シールの赤: R高 G低 B低 → 反転してコントラスト強調
-            for (let i = 0; i < data.length; i += 4) {
-                const r = data[i];
-                const g = data[i + 1];
-                const b = data[i + 2];
+    drawCanvas();
+}
 
-                // 赤色の判定：R成分が高く、Gが低く、Bが低い
-                const isRed = r > 150 && g < 120 && b < 120;
-                // 赤い背景上の白い文字：明るさが高い
-                const brightness = (r + g + b) / 3;
-                const isWhiteOnRed = r > 180 && g > 180 && b > 180;
+function drawCanvas() {
+    if (!currentImage) return;
+    const canvas = dom.canvas;
+    const ctx = canvas.getContext('2d');
 
-                if (isRed) {
-                    // 赤い背景→黒にする（テキストの背景を統一）
-                    data[i] = 0;
-                    data[i + 1] = 0;
-                    data[i + 2] = 0;
-                } else if (isWhiteOnRed || brightness > 200) {
-                    // 白い部分→白のまま（数字テキスト）
-                    data[i] = 255;
-                    data[i + 1] = 255;
-                    data[i + 2] = 255;
-                } else {
-                    // その他の部分→グレースケール化
-                    const gray = Math.round(0.299 * r + 0.587 * g + 0.114 * b);
-                    // 閾値処理：暗い部分は黒、明るい部分は白
-                    const bw = gray > 160 ? 255 : 0;
-                    data[i] = bw;
-                    data[i + 1] = bw;
-                    data[i + 2] = bw;
-                }
-            }
+    // 画像描画
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    ctx.drawImage(currentImage, 0, 0, canvas.width, canvas.height);
 
-            ctx.putImageData(imageData, 0, 0);
-            resolve(canvas.toDataURL('image/png'));
-        };
-        img.onerror = reject;
-        img.src = imageUrl;
+    // 四辺の描画
+    ctx.beginPath();
+    ctx.moveTo(corners[0].x, corners[0].y);
+    for (let i = 1; i < 4; i++) ctx.lineTo(corners[i].x, corners[i].y);
+    ctx.closePath();
+    ctx.strokeStyle = 'rgba(244, 114, 182, 0.8)'; // accent pink
+    ctx.lineWidth = 2;
+    ctx.stroke();
+
+    // グリッド線（5x6のガイド）
+    ctx.strokeStyle = 'rgba(255, 255, 255, 0.3)';
+    ctx.lineWidth = 1;
+    // 縦線
+    for (let i = 1; i < 5; i++) {
+        const t = i / 5;
+        const topX = corners[0].x + (corners[1].x - corners[0].x) * t;
+        const topY = corners[0].y + (corners[1].y - corners[0].y) * t;
+        const botX = corners[3].x + (corners[2].x - corners[3].x) * t;
+        const botY = corners[3].y + (corners[2].y - corners[3].y) * t;
+        ctx.beginPath(); ctx.moveTo(topX, topY); ctx.lineTo(botX, botY); ctx.stroke();
+    }
+    // 横線
+    for (let i = 1; i < 6; i++) {
+        const t = i / 6;
+        const leftX = corners[0].x + (corners[3].x - corners[0].x) * t;
+        const leftY = corners[0].y + (corners[3].y - corners[0].y) * t;
+        const rightX = corners[1].x + (corners[2].x - corners[1].x) * t;
+        const rightY = corners[1].y + (corners[2].y - corners[1].y) * t;
+        ctx.beginPath(); ctx.moveTo(leftX, leftY); ctx.lineTo(rightX, rightY); ctx.stroke();
+    }
+
+    // 四隅の点
+    corners.forEach((p, i) => {
+        ctx.beginPath();
+        ctx.arc(p.x, p.y, 8, 0, Math.PI * 2);
+        ctx.fillStyle = (draggingPoint === i) ? '#db2777' : '#f472b6';
+        ctx.fill();
+        ctx.strokeStyle = '#fff';
+        ctx.lineWidth = 2;
+        ctx.stroke();
+
+        // 番号
+        ctx.fillStyle = '#fff';
+        ctx.font = '10px Arial';
+        ctx.fillText(i + 1, p.x - 3, p.y - 12);
     });
 }
 
-// =====================================
-// OCR処理
-// =====================================
+function setupCanvasEvents() {
+    const canvas = dom.canvas;
 
-/**
- * Tesseract.jsによるOCR実行（前処理付き）
- * @param {File} imageFile - OCR対象画像ファイル
- */
-async function runOCR(imageFile) {
-    if (isProcessing) return;
-    isProcessing = true;
-
-    // UI更新: 処理開始
-    dom.ocrButton.disabled = true;
-    dom.ocrButton.textContent = '⏳ 読み取り中...';
-    dom.progressSection.classList.add('visible');
-    dom.progressBar.style.width = '0%';
-    dom.progressText.textContent = '画像を前処理中...';
-    dom.resultSection.classList.remove('visible');
-
-    try {
-        // 画像URLを作成
-        const imageUrl = URL.createObjectURL(imageFile);
-
-        // 画像の前処理
-        dom.progressBar.style.width = '10%';
-        const preprocessedUrl = await preprocessImage(imageUrl);
-        URL.revokeObjectURL(imageUrl);
-
-        dom.progressText.textContent = 'OCRエンジンを準備中...';
-        dom.progressBar.style.width = '20%';
-
-        // Tesseract.jsでOCR実行（前処理済み画像を使用）
-        const result = await Tesseract.recognize(
-            preprocessedUrl,
-            'eng',
-            {
-                logger: (info) => {
-                    if (info.status === 'recognizing text') {
-                        const percent = Math.round(20 + info.progress * 70);
-                        dom.progressBar.style.width = `${percent}%`;
-                        dom.progressText.textContent = `テキストを認識中... ${Math.round(info.progress * 100)}%`;
-                    } else if (info.status === 'loading language traineddata') {
-                        const percent = Math.round(info.progress * 100);
-                        dom.progressText.textContent = `言語データを読み込み中... ${percent}%`;
-                    } else if (info.status === 'initializing api') {
-                        dom.progressText.textContent = 'OCRエンジンを初期化中...';
-                    }
-                },
-                tessedit_char_whitelist: '0123456789. ',
-                tessedit_pageseg_mode: '6',
-            }
-        );
-
-        dom.progressBar.style.width = '95%';
-        dom.progressText.textContent = '結果を解析中...';
-
-        // OCR結果を処理
-        const ocrText = result.data.text.trim();
-        processOCRResult(ocrText);
-
-        dom.progressBar.style.width = '100%';
-
-    } catch (error) {
-        console.error('OCRエラー:', error);
-        dom.progressText.textContent = 'エラーが発生しました';
-        alert('OCR処理中にエラーが発生しました。\n別の画像で試してみてください。');
-    } finally {
-        isProcessing = false;
-        dom.ocrButton.disabled = false;
-        dom.ocrButton.textContent = '🔍 シールを読み取る';
-        setTimeout(() => {
-            dom.progressSection.classList.remove('visible');
-        }, 1000);
+    function getMousePos(evt) {
+        const rect = canvas.getBoundingClientRect();
+        const clientX = evt.touches ? evt.touches[0].clientX : evt.clientX;
+        const clientY = evt.touches ? evt.touches[0].clientY : evt.clientY;
+        return {
+            x: clientX - rect.left,
+            y: clientY - rect.top
+        };
     }
-}
 
-/**
- * OCR結果からスコアを抽出し表示
- * @param {string} text - OCRで認識されたテキスト
- */
-function processOCRResult(text) {
-    // 結果セクションを表示
-    dom.resultSection.classList.add('visible');
-    dom.ocrTextBox.textContent = text || '（テキストが検出されませんでした）';
-
-    // 複数の点数を抽出
-    const scores = extractAllScores(text);
-    detectedScores = scores;
-
-    // 検出された点数リストを表示
-    renderDetectedScores(scores);
-
-    // 結果セクションまでスクロール
-    dom.resultSection.scrollIntoView({ behavior: 'smooth', block: 'center' });
-}
-
-/**
- * テキストから有効な点数をすべて抽出
- * @param {string} text - OCRテキスト
- * @returns {number[]} 検出された有効な点数の配列
- */
-function extractAllScores(text) {
-    if (!text) return [];
-
-    const scores = [];
-
-    // 行ごとに分割して処理
-    const lines = text.split(/[\n\r]+/);
-
-    for (const line of lines) {
-        // 各行から数値パターンを抽出
-        const cleaned = line.replace(/\s+/g, ' ').trim();
-        // 小数点を含む数値パターン
-        const matches = cleaned.match(/\d+\.?\d*/g);
-
-        if (!matches) continue;
-
-        for (const match of matches) {
-            const num = parseFloat(match);
-            if (VALID_SCORES.includes(num)) {
-                scores.push(num);
+    function onDown(e) {
+        e.preventDefault(); // スクロール防止
+        const pos = getMousePos(e);
+        // ヒットテスト (半径15ピクセルの当たり判定)
+        for (let i = 0; i < corners.length; i++) {
+            const dx = pos.x - corners[i].x;
+            const dy = pos.y - corners[i].y;
+            if (dx * dx + dy * dy < 225) {
+                draggingPoint = i;
+                drawCanvas();
+                break;
             }
         }
     }
 
-    return scores;
+    function onMove(e) {
+        if (draggingPoint === -1) return;
+        e.preventDefault();
+        const pos = getMousePos(e);
+        // 境界制限
+        corners[draggingPoint].x = Math.max(0, Math.min(canvas.width, pos.x));
+        corners[draggingPoint].y = Math.max(0, Math.min(canvas.height, pos.y));
+        drawCanvas();
+    }
+
+    function onUp(e) {
+        if (draggingPoint !== -1) {
+            draggingPoint = -1;
+            drawCanvas();
+        }
+    }
+
+    canvas.addEventListener('mousedown', onDown);
+    canvas.addEventListener('mousemove', onMove);
+    window.addEventListener('mouseup', onUp);
+
+    canvas.addEventListener('touchstart', onDown, { passive: false });
+    canvas.addEventListener('touchmove', onMove, { passive: false });
+    window.addEventListener('touchend', onUp);
 }
 
-/**
- * 検出されたスコアリストを結果セクションに表示
- * @param {number[]} scores - 検出された点数配列
- */
-function renderDetectedScores(scores) {
-    const detectedArea = document.getElementById('detected-score');
+// =====================================
+// OpenCV.js マトリクス解析とマッチング
+// =====================================
+async function analyzeMatrix() {
+    if (typeof cv === 'undefined' || !cv.Mat) {
+        alert('OpenCV.jsがロードされるまでお待ちください。'); return;
+    }
 
-    if (scores.length === 0) {
-        detectedArea.innerHTML = `
-      <div style="text-align: center; width: 100%;">
-        <div style="font-size: 1.5rem; margin-bottom: 8px;">🤔</div>
-        <span class="detected-score-label">点数を検出できませんでした</span>
-        <p style="font-size: 0.75rem; color: var(--text-muted); margin-top: 8px;">
-          下のセレクターから手動で追加してください
-        </p>
-      </div>
-    `;
+    dom.analyzeBtn.disabled = true;
+    dom.resultCard.classList.remove('hidden');
+    dom.progressSection.classList.add('visible');
+    dom.progressBar.style.width = '20%';
+    dom.progressText.textContent = '射影変換（歪み補正）を実行中...';
+
+    // JSスレッドブロックを防ぐためタイマーで分離
+    setTimeout(() => performPerspectiveTransform(), 100);
+}
+
+function performPerspectiveTransform() {
+    try {
+        // 元画像サイズの座標に変換
+        const srcPoints = corners.map(p => ({ x: p.x * canvasScale, y: p.y * canvasScale }));
+
+        let src = cv.imread(currentImage);
+
+        // ゴールサイズ (横5マス × 縦6マス) => (500 x 600 ピクセルが計算しやすい)
+        const cellW = 100;
+        const cellH = 100;
+        const dstW = cellW * 5;
+        const dstH = cellH * 6;
+        let dst = new cv.Mat();
+
+        let srcTri = cv.matFromArray(4, 1, cv.CV_32FC2, [
+            srcPoints[0].x, srcPoints[0].y,
+            srcPoints[1].x, srcPoints[1].y,
+            srcPoints[2].x, srcPoints[2].y,
+            srcPoints[3].x, srcPoints[3].y
+        ]);
+        let dstTri = cv.matFromArray(4, 1, cv.CV_32FC2, [
+            0, 0,
+            dstW, 0,
+            dstW, dstH,
+            0, dstH
+        ]);
+
+        let M = cv.getPerspectiveTransform(srcTri, dstTri);
+        let dsize = new cv.Size(dstW, dstH);
+        cv.warpPerspective(src, dst, M, dsize, cv.INTER_LINEAR, cv.BORDER_CONSTANT, new cv.Scalar());
+
+        dom.progressBar.style.width = '50%';
+        dom.progressText.textContent = 'マス目の切り出し中...';
+
+        // 30マスに切り出してDataURLにする
+        currentCells = [];
+        for (let row = 0; row < 6; row++) {
+            for (let col = 0; col < 5; col++) {
+                let rect = new cv.Rect(col * cellW, row * cellH, cellW, cellH);
+                let cellMat = dst.roi(rect);
+                // Canvasを介してDataURL化
+                let tempCanvas = document.createElement('canvas');
+                cv.imshow(tempCanvas, cellMat);
+                currentCells.push(tempCanvas.toDataURL('image/jpeg', 0.8));
+                cellMat.delete();
+            }
+        }
+
+        src.delete(); dst.delete(); M.delete(); srcTri.delete(); dstTri.delete();
+
+        dom.progressBar.style.width = '80%';
+        dom.progressText.textContent = '辞書からシールを検出中...';
+
+        setTimeout(() => performTemplateMatching(), 100);
+    } catch (err) {
+        console.error(err);
+        alert('解析中にエラーが発生しました。');
+        dom.analyzeBtn.disabled = false;
+        dom.progressSection.classList.remove('visible');
+    }
+}
+
+function performTemplateMatching() {
+    // 辞書に登録があるか確認
+    const registeredScores = Object.keys(templates);
+    const hasTemplates = registeredScores.length > 0;
+
+    if (!hasTemplates) {
+        dom.unregisteredWarning.classList.remove('hidden');
+        dom.detectedScoreDiv.innerHTML = '';
+        dom.confirmAddBtn.disabled = true;
+    } else {
+        dom.unregisteredWarning.classList.add('hidden');
+        dom.confirmAddBtn.disabled = false;
+    }
+
+    currentDetectedResults = [];
+    dom.matrixGrid.innerHTML = '';
+
+    // 非同期でテンプレート画像を読み込むためのPromise配列
+    const templateImages = {};
+    const loadPromises = registeredScores.map(score => {
+        return new Promise(resolve => {
+            const img = new Image();
+            img.onload = () => { templateImages[score] = img; resolve(); };
+            img.src = templates[score];
+        });
+    });
+
+    const isCellRed = (cellImg) => {
+        // 簡単な色判定。赤色成分が多ければシールとみなす処理（OpenCVなしの単純なHTML Canvas走査）
+        let c = document.createElement('canvas');
+        c.width = 100; c.height = 100;
+        let ctx = c.getContext('2d');
+        ctx.drawImage(cellImg, 0, 0);
+        let data = ctx.getImageData(0, 0, 100, 100).data;
+        let redPixels = 0;
+        for (let i = 0; i < data.length; i += 4) {
+            let r = data[i], g = data[i + 1], b = data[i + 2];
+            // 赤の条件
+            if (r > 150 && g < 120 && b < 120) redPixels++;
+        }
+        // ピクセルの10%以上が赤ならシールと判定
+        return (redPixels / (100 * 100)) > 0.05;
+    };
+
+    Promise.all(loadPromises).then(() => {
+        let totalScore = 0;
+        let scoreCounts = {};
+
+        // 30のセルを処理
+        let processedCount = 0;
+
+        currentCells.forEach((cellDataUrl, index) => {
+            const cellDiv = document.createElement('div');
+            cellDiv.className = 'matrix-cell';
+            const img = new Image();
+            img.src = cellDataUrl;
+
+            const overlay = document.createElement('div');
+            overlay.className = 'matrix-cell-overlay';
+
+            cellDiv.appendChild(img);
+            cellDiv.appendChild(overlay);
+            dom.matrixGrid.appendChild(cellDiv);
+
+            img.onload = () => {
+                if (!hasTemplates) {
+                    overlay.classList.add('unknown');
+                    overlay.textContent = '?';
+                } else {
+                    // シール（赤い）があるか判定
+                    if (!isCellRed(img)) {
+                        overlay.classList.add('empty');
+                        overlay.textContent = '空';
+                    } else {
+                        // テンプレートマッチング実行
+                        let bestMatch = { score: null, val: -1 };
+
+                        let cellMat = cv.imread(img);
+
+                        for (const score of Object.keys(templateImages)) {
+                            let tempMat = cv.imread(templateImages[score]);
+
+                            // グレースケールでマッチング
+                            let cellGray = new cv.Mat();
+                            let tempGray = new cv.Mat();
+                            cv.cvtColor(cellMat, cellGray, cv.COLOR_RGBA2GRAY);
+                            cv.cvtColor(tempMat, tempGray, cv.COLOR_RGBA2GRAY);
+
+                            let result = new cv.Mat();
+                            // TM_CCOEFF_NORMED: 1に近いほど一致
+                            cv.matchTemplate(cellGray, tempGray, result, cv.TM_CCOEFF_NORMED);
+                            let minMax = cv.minMaxLoc(result);
+
+                            if (minMax.maxVal > bestMatch.val) {
+                                bestMatch = { score: score, val: minMax.maxVal };
+                            }
+
+                            cellGray.delete(); tempGray.delete(); result.delete(); tempMat.delete();
+                        }
+
+                        cellMat.delete();
+
+                        // 一致度が閾値(0.4)を超えれば採用
+                        if (bestMatch.val > 0.4) {
+                            overlay.classList.add('identified');
+                            overlay.textContent = bestMatch.score;
+
+                            // 結果に追加
+                            const val = parseFloat(bestMatch.score);
+                            currentDetectedResults.push({ score: val, dataUrl: cellDataUrl });
+                            totalScore += val;
+                            scoreCounts[val] = (scoreCounts[val] || 0) + 1;
+                        } else {
+                            overlay.classList.add('unknown');
+                            overlay.textContent = '未登録';
+                        }
+                    }
+                }
+
+                processedCount++;
+                if (processedCount === 30) {
+                    finishMatching(totalScore, scoreCounts, hasTemplates);
+                }
+            };
+        });
+    });
+}
+
+function finishMatching(totalScore, scoreCounts, hasTemplates) {
+    dom.progressBar.style.width = '100%';
+    dom.progressSection.classList.remove('visible');
+    dom.analyzeBtn.disabled = false;
+
+    if (hasTemplates) {
+        let html = `
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
+                <span style="font-weight: 700; color: white;">検出: ${currentDetectedResults.length}枚</span>
+                <div>
+                    <span class="detected-score-value" style="font-size: 2rem;">${Math.round(totalScore * 10) / 10}</span>
+                    <span style="color: var(--text-muted);"> 点</span>
+                </div>
+            </div>
+            <div style="display: flex; flex-wrap: wrap; gap: 8px; justify-content: center;">
+        `;
+
+        Object.keys(scoreCounts).forEach(score => {
+            html += `
+                <div style="background: rgba(244, 114, 182, 0.15); border: 1px solid rgba(244, 114, 182, 0.3); 
+                            border-radius: 8px; padding: 4px 10px; font-size: 0.85rem;">
+                    <strong style="color: var(--accent-pink-light);">${score}点</strong>
+                    <span style="color: var(--text-muted);"> × ${scoreCounts[score]}</span>
+                </div>
+            `;
+        });
+        html += `</div>`;
+        dom.detectedScoreDiv.innerHTML = html;
+        dom.confirmAddBtn.textContent = `✅ 合計 ${Math.round(totalScore * 10) / 10}点 を履歴に追加する`;
+    }
+}
+
+// =====================================
+// 辞書管理モジュール (Templates)
+// =====================================
+function renderTemplateList() {
+    dom.templateList.innerHTML = '';
+
+    VALID_SCORES.forEach(score => {
+        const item = document.createElement('div');
+        item.className = 'template-item' + (templates[score] ? ' registered' : '');
+
+        let imgHtml = templates[score] ? `<img src="${templates[score]}">` : `<div style="width: 60px; height: 60px; background: #000; border-radius: 8px; border: 1px dashed var(--text-muted); display:flex; align-items:center; justify-content:center; color: var(--text-muted); font-size:10px;">未登録</div>`;
+
+        let statusHtml = templates[score] ? `<span class="template-status registered">✅ 登録済み</span>` : `<span class="template-status">❌ 未登録</span>`;
+
+        item.innerHTML = `
+            ${imgHtml}
+            <div class="template-info">
+                <div class="template-score">${score} 点シール</div>
+                ${statusHtml}
+            </div>
+            <button class="btn btn-secondary register-btn" style="width: auto; padding: 8px 16px;">
+                ${templates[score] ? '再登録' : '登録'}
+            </button>
+        `;
+
+        item.querySelector('.register-btn').addEventListener('click', () => {
+            openTemplateModal(score);
+        });
+
+        dom.templateList.appendChild(item);
+    });
+}
+
+function openTemplateModal(score) {
+    if (currentCells.length === 0) {
+        alert('まずは「スキャン」タブで台紙の画像を読み込ませ、マトリクスを解析してください！\n解析された30マスの中から参考画像を登録できます。');
+        dom.tabScan.click();
         return;
     }
 
-    // 点数をグループ化してカウント
-    const scoreCounts = {};
-    for (const s of scores) {
-        scoreCounts[s] = (scoreCounts[s] || 0) + 1;
-    }
+    currentAssigningScore = score;
+    dom.modalTargetScore.textContent = score + ' 点';
+    dom.modal.classList.remove('hidden');
 
-    const total = scores.reduce((sum, s) => sum + s, 0);
-    const roundedTotal = Math.round(total * 10) / 10;
+    dom.modalMatrixGrid.innerHTML = '';
+    currentCells.forEach((cellDataUrl, idx) => {
+        const cell = document.createElement('div');
+        cell.className = 'matrix-cell';
+        cell.style.cursor = 'pointer';
 
-    let html = `
-    <div style="width: 100%;">
-      <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px;">
-        <span class="detected-score-label">🎯 検出結果: ${scores.length}枚のシール</span>
-        <div>
-          <span class="detected-score-value" style="font-size: 1.5rem;">${roundedTotal}</span>
-          <span class="detected-score-unit">点</span>
-        </div>
-      </div>
-      <div style="display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 12px;">
-  `;
+        const img = new Image();
+        img.src = cellDataUrl;
+        cell.appendChild(img);
 
-    // 各点数ごとのバッジを表示
-    const sortedScores = Object.keys(scoreCounts).sort((a, b) => parseFloat(b) - parseFloat(a));
-    for (const score of sortedScores) {
-        const count = scoreCounts[score];
-        html += `
-      <div style="background: rgba(244, 114, 182, 0.15); border: 1px solid rgba(244, 114, 182, 0.3); 
-                  border-radius: 8px; padding: 6px 12px; font-size: 0.85rem;">
-        <strong style="color: var(--accent-pink-light);">${score}点</strong>
-        <span style="color: var(--text-muted);"> × ${count}</span>
-      </div>
-    `;
-    }
+        // 登録イベント
+        cell.addEventListener('click', () => {
+            templates[currentAssigningScore] = cellDataUrl;
+            saveData();
+            closeModal();
+            renderTemplateList();
+        });
 
-    html += `
-      </div>
-      <button class="btn btn-primary" id="add-all-detected" style="margin-top: 0; font-size: 0.85rem; padding: 10px 20px;">
-        ✅ ${scores.length}枚すべて追加する
-      </button>
-    </div>
-  `;
-
-    detectedArea.innerHTML = html;
-
-    // 一括追加ボタンのイベント
-    document.getElementById('add-all-detected').addEventListener('click', () => {
-        for (const score of detectedScores) {
-            addSticker(score, 'OCR');
-        }
-        detectedScores = [];
-        // ボタンを無効化
-        const btn = document.getElementById('add-all-detected');
-        if (btn) {
-            btn.disabled = true;
-            btn.textContent = '✅ 追加しました！';
-            btn.style.opacity = '0.5';
-        }
+        dom.modalMatrixGrid.appendChild(cell);
     });
 }
 
+function closeModal() {
+    dom.modal.classList.add('hidden');
+    currentAssigningScore = null;
+}
+
+
 // =====================================
-// シール管理
+// シール管理・履歴・合計 (変更なし)
 // =====================================
 
-/**
- * シールを追加
- * @param {number} score - 点数
- * @param {string} method - 追加方法（'OCR' or '手動'）
- */
 function addSticker(score, method) {
-    const sticker = {
+    stickers.push({
         id: Date.now() + Math.random(),
         score: score,
         method: method,
         timestamp: new Date().toISOString(),
-    };
-
-    stickers.push(sticker);
-    saveStickers();
+    });
+    saveData();
     renderStickerList();
     updateTotal();
 }
 
-/**
- * シールを削除
- * @param {number} id - シールのID
- */
 function removeSticker(id) {
-    stickers = stickers.filter((s) => s.id !== id);
-    saveStickers();
+    stickers = stickers.filter(s => s.id !== id);
+    saveData();
     renderStickerList();
     updateTotal();
 }
 
-// =====================================
-// 表示更新
-// =====================================
-
-/** シール一覧の再描画 */
 function renderStickerList() {
-    // 空リスト表示の切り替え
     if (stickers.length === 0) {
         dom.emptyList.style.display = 'block';
         dom.listActions.style.display = 'none';
         dom.stickerCount.textContent = '0枚';
-        const items = dom.stickerList.querySelectorAll('.sticker-item');
-        items.forEach((item) => item.remove());
+        Array.from(dom.stickerList.querySelectorAll('.sticker-item')).forEach(el => el.remove());
         return;
     }
 
@@ -514,44 +703,37 @@ function renderStickerList() {
     dom.listActions.style.display = 'flex';
     dom.stickerCount.textContent = `${stickers.length}枚`;
 
-    // 既存のシール要素を全削除
-    const existingItems = dom.stickerList.querySelectorAll('.sticker-item');
-    existingItems.forEach((item) => item.remove());
+    Array.from(dom.stickerList.querySelectorAll('.sticker-item')).forEach(el => el.remove());
 
-    // シールを再描画
-    stickers.forEach((sticker, index) => {
+    const sorted = [...stickers].reverse(); // 新しいもの順
+    sorted.forEach((sticker) => {
         const li = document.createElement('li');
         li.className = 'sticker-item';
         li.innerHTML = `
-      <div class="sticker-info">
-        <span class="sticker-number">#${index + 1}</span>
-        <span class="sticker-score">${sticker.score} 点</span>
-        <span class="sticker-method">${sticker.method}</span>
-      </div>
-      <div class="sticker-actions">
-        <button class="btn-icon" onclick="removeSticker(${sticker.id})" title="削除">✕</button>
-      </div>
-    `;
-        dom.stickerList.appendChild(li);
+            <div class="sticker-info">
+                <span class="sticker-score">${sticker.score} 点</span>
+                <span class="sticker-method">${sticker.method}</span>
+            </div>
+            <button class="btn-icon" onclick="removeSticker(${sticker.id})" title="削除">✕</button>
+        `;
+        // insert before empty-list text realistically
+        dom.stickerList.insertBefore(li, dom.emptyList);
     });
 }
 
-/** 合計の更新 */
 function updateTotal() {
     const total = stickers.reduce((sum, s) => sum + s.score, 0);
     const roundedTotal = Math.round(total * 10) / 10;
-
     dom.totalValue.textContent = roundedTotal;
 
-    // プログレスバー
     const progress = Math.min((roundedTotal / GOAL_POINTS) * 100, 100);
     dom.goalProgressFill.style.width = `${progress}%`;
 
-    // 残り点数
     if (roundedTotal >= GOAL_POINTS) {
         dom.totalRemaining.textContent = '🎉 目標達成！お皿と交換できます！';
         dom.goalProgressFill.classList.add('complete');
-        showCelebration();
+        dom.celebration.classList.add('visible');
+        spawnConfetti();
     } else {
         const remaining = Math.round((GOAL_POINTS - roundedTotal) * 10) / 10;
         dom.totalRemaining.textContent = `あと ${remaining} 点でお皿と交換！`;
@@ -560,26 +742,13 @@ function updateTotal() {
     }
 }
 
-// =====================================
-// お祝い演出
-// =====================================
-
-/** 達成時のお祝いアニメーション */
-function showCelebration() {
-    dom.celebration.classList.add('visible');
-    spawnConfetti();
-}
-
-/** 紙吹雪を生成 */
 function spawnConfetti() {
     dom.confettiContainer.innerHTML = '';
     const colors = ['#f472b6', '#fbb6ce', '#fbbf24', '#34d399', '#818cf8', '#fb923c'];
-    const shapes = ['●', '■', '▲', '🌸', '✿'];
-
     for (let i = 0; i < 40; i++) {
         const confetti = document.createElement('div');
         confetti.className = 'confetti';
-        confetti.textContent = shapes[Math.floor(Math.random() * shapes.length)];
+        confetti.textContent = '🌸';
         confetti.style.left = `${Math.random() * 100}%`;
         confetti.style.fontSize = `${Math.random() * 12 + 8}px`;
         confetti.style.color = colors[Math.floor(Math.random() * colors.length)];
@@ -587,34 +756,29 @@ function spawnConfetti() {
         confetti.style.animationDuration = `${Math.random() * 2 + 2}s`;
         dom.confettiContainer.appendChild(confetti);
     }
-
-    setTimeout(() => {
-        dom.confettiContainer.innerHTML = '';
-    }, 5000);
+    setTimeout(() => { dom.confettiContainer.innerHTML = ''; }, 5000);
 }
 
 // =====================================
 // データ永続化（LocalStorage）
 // =====================================
-
-/** シールデータを保存 */
-function saveStickers() {
+function saveData() {
     try {
-        localStorage.setItem(STORAGE_KEY, JSON.stringify(stickers));
+        localStorage.setItem(STORAGE_KEY_STICKERS, JSON.stringify(stickers));
+        localStorage.setItem(STORAGE_KEY_TEMPLATES, JSON.stringify(templates));
     } catch (e) {
-        console.warn('LocalStorageへの保存に失敗しました:', e);
+        console.warn('LocalStorage save error:', e);
     }
 }
 
-/** シールデータを読み込み */
-function loadStickers() {
+function loadData() {
     try {
-        const data = localStorage.getItem(STORAGE_KEY);
-        if (data) {
-            stickers = JSON.parse(data);
-        }
+        const s = localStorage.getItem(STORAGE_KEY_STICKERS);
+        if (s) stickers = JSON.parse(s);
+
+        const t = localStorage.getItem(STORAGE_KEY_TEMPLATES);
+        if (t) templates = JSON.parse(t);
     } catch (e) {
-        console.warn('LocalStorageからの読み込みに失敗しました:', e);
-        stickers = [];
+        console.warn('LocalStorage load error:', e);
     }
 }

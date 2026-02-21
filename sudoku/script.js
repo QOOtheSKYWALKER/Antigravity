@@ -207,6 +207,9 @@ const btnRedo = document.getElementById('btn-redo');
 function initGame(difficulty) {
     currentDifficulty = difficulty;
 
+    // 選択された難易度をローカルストレージに保存
+    localStorage.setItem('sudoku-difficulty', difficulty);
+
     // UI: Set active button immediately (no generating state)
     document.querySelectorAll('.diff-btn').forEach(btn => {
         btn.classList.remove('active');
@@ -763,6 +766,7 @@ function handleRocket() {
             } else {
                 // 全てのマスにメモが入っている場合、確定マスから類推した論理的候補とIntersectしてトリミングする
                 let memoRemoved = false;
+
                 for (let r = 0; r < 9; r++) {
                     for (let c = 0; c < 9; c++) {
                         if (board[r][c] === 0) {
@@ -843,7 +847,8 @@ btnRedo.addEventListener('click', () => redo());
 // ===== ゲーム開始 =====
 
 buildBoard();
-initGame('hard');
+const savedDifficulty = localStorage.getItem('sudoku-difficulty') || 'hard';
+initGame(savedDifficulty);
 
 // ============================================================================
 // OCR Module Integration (Ported from sudoku2)
@@ -1268,16 +1273,16 @@ btnAnalyze.addEventListener('click', async () => {
             }
         }
 
-        // 唯一解を持つかどうかの検証
-        let hasUniqueSolution = false;
+        // 唯一解を持つかどうかの検証（※世の中には複数解を持つ悪問もあるため、1つ以上解があればヨシとする）
+        let isSolvable = false;
         if (isRuleValid) {
-            // grid2Dをコピーして渡す（solveメソッドが盤面を破壊する可能性があるため）
+            // grid2Dをコピーして渡す
             const gridCopy = grid2D.map(row => [...row]);
-            const solutionsCount = SudokuLogicalSolver.countSolutions(gridCopy, 2);
-            hasUniqueSolution = (solutionsCount === 1);
+            const solutionsCount = SudokuLogicalSolver.countSolutions(gridCopy, 1); // 1つ見つかれば十分
+            isSolvable = (solutionsCount >= 1);
         }
 
-        if (isRuleValid && hasUniqueSolution) {
+        if (isRuleValid && isSolvable) {
             // 難易度（テクニック）判定のために論理ソルバーを回す
             const solver = new SudokuLogicalSolver(grid2D);
             const result = solver.solve(); // 人間的ロジックで解ける限界まで解く

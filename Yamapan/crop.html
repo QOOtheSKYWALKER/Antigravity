@@ -1,0 +1,35 @@
+<!DOCTYPE html>
+<html>
+
+<body>
+    <img id="img" src="test_sticker.jpg" onload="crop()">
+    <canvas id="c05"></canvas>
+    <canvas id="c1"></canvas>
+    <canvas id="c15"></canvas>
+    <script>
+        function crop() {
+            const img = document.getElementById('img');
+            // Values estimated manually from the photo:
+            // The photo is 1200x1600 approx.
+            // 1.5 point stickers are on the right.
+            // 0.5 point are on the left.
+            // 1 point is top left.
+
+            function drawRegion(id, x, y, w, h) {
+                const c = document.getElementById(id);
+                c.width = w; c.height = h;
+                const ctx = c.getContext('2d');
+                ctx.drawImage(img, x, y, w, h, 0, 0, w, h);
+                console.log(id + " : " + c.toDataURL());
+            }
+
+            // Let's just output the whole image loaded, to confirm
+            console.log("Image loaded: " + img.width + "x" + img.height);
+
+            // We don't have exact coordinates, let's just make the browser_subagent take a screenshot of crop.html
+            // Wait, let's just build the template registration UI in the main app!
+        }
+    </script>
+</body>
+
+</html>
