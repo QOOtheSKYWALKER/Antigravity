@@ -894,6 +894,7 @@ const progressFill = document.getElementById('ocr-progress-fill');
 let uploadedImage = null;
 let cellCanvases = [];
 let manualCorrectionCache = [];
+let validationFailCount = 0; // 判定失敗回数を記録
 
 let ocrLibrariesLoaded = false;
 
@@ -1315,14 +1316,12 @@ function preprocessCell(thresh, dynamicThreshold) {
 
     let hasDigit = false;
 
-    // 数字が見つかった場合、中央に配置
+    // 数字が見つかった場合、元の位置で出力
     if (bestRect && maxArea >= dynamicThreshold) {
         hasDigit = true;
         let digitROI = thresh.roi(bestRect);
 
-        let targetX = Math.floor((output.cols - bestRect.width) / 2);
-        let targetY = Math.floor((output.rows - bestRect.height) / 2);
-        let targetRect = new cv.Rect(targetX, targetY, bestRect.width, bestRect.height);
+        let targetRect = new cv.Rect(bestRect.x, bestRect.y, bestRect.width, bestRect.height);
 
         let processedDigit = new cv.Mat();
         // 白背景用反転（文字を黒にする）
@@ -1434,7 +1433,7 @@ let currentGridResult = [];
 let finalValidatedGrid = null;
 
 function hideAllOcrStates() {
-    const states = ['ocr-state-success', 'ocr-state-partial-fail', 'ocr-state-manual-grid'];
+    const states = ['ocr-state-success', 'ocr-state-partial-fail', 'ocr-state-manual-grid', 'ocr-state-manual-retry'];
     states.forEach(id => {
         const el = document.getElementById(id);
         if (el) el.style.display = 'none';
@@ -1577,7 +1576,6 @@ async function startManualCorrectionFlow() {
             for (const idx of group.indices) {
                 currentGridResult[idx] = val;
             }
-
             // キャッシュへの登録
             if (val !== 0) {
                 let cacheMat = cv.imread(group.canvas);
@@ -1586,8 +1584,8 @@ async function startManualCorrectionFlow() {
             }
         }
 
-        // 補正後、再度検証へ
-        proceedToValidation(currentGridResult, true);
+        // 補正後、再度検証へ (手動フロー扱い)
+        proceedToValidation(currentGridResult, true, true);
     } catch (err) {
         console.error(err);
         ocrStatus.textContent = err.toString();
@@ -1597,19 +1595,39 @@ async function startManualCorrectionFlow() {
 document.getElementById('btn-state-input').addEventListener('click', startManualCorrectionFlow);
 document.getElementById('ocr-parsed-preview').addEventListener('click', startManualCorrectionFlow);
 
-function proceedToValidation(grid1D, autoPlay = false) {
+// 解析失敗（全損・枠検出失敗・ヒント不足）時のステート表示
+function showOcrTotalFailure(errorMsg = null) {
+    hideAllOcrStates(); // 全てのパネルを隠す
+    progressBar.style.display = 'none';
+    ocrStatus.textContent = '';
+    document.querySelector('.ocr-progress-container').style.display = 'none';
+
+    // アップロードエリアを再表示し、エラーメッセージに切り替える
+    uploadZone.style.display = 'block';
+    document.getElementById('upload-default-msg').style.display = 'none';
+    const errorMsgDiv = document.getElementById('upload-error-msg');
+    errorMsgDiv.style.display = 'block';
+
+    // エラー詳細メッセージがあれば表示（オプション）
+    if (errorMsg) {
+        console.warn("OCR Total Failure:", errorMsg);
+    }
+}
+
+function proceedToValidation(grid1D, autoPlay = false, isFromManual = false) {
     const grid2D = [];
     for (let r = 0; r < 9; r++) {
         grid2D.push(grid1D.slice(r * 9, r * 9 + 9));
     }
     // 成功時も画像プレビューが見えるようにする
     document.querySelector('.ocr-canvas-container').style.display = 'flex';
-    validateAndApplyOcrGrid(grid2D, autoPlay);
+    validateAndApplyOcrGrid(grid2D, autoPlay, isFromManual);
 }
 
 // 自動解析トリガー関数
 async function startOCRAnalysis() {
     hideAllOcrStates();
+    validationFailCount = 0; // 失敗カウントをリセット
 
     // 解析中はアップロードエリアを完全に隠す
     uploadZone.style.display = 'none';
@@ -1741,16 +1759,11 @@ async function startOCRAnalysis() {
         await worker.terminate();
 
         // --- ルーティング判定 ---
-        if (gridResult.every(n => n === 0)) {
-            // ルートB: 全損
-            progressBar.style.display = 'none';
-            ocrStatus.textContent = '';
-            document.querySelector('.ocr-progress-container').style.display = 'none';
+        const givenCount = gridResult.filter(n => n !== 0).length;
 
-            // アップロードエリアを再表示し、エラーメッセージに切り替える
-            uploadZone.style.display = 'block';
-            document.getElementById('upload-default-msg').style.display = 'none';
-            document.getElementById('upload-error-msg').style.display = 'block';
+        // 全損（解析失敗）の場合は再取込へ
+        if (givenCount === 0) {
+            showOcrTotalFailure("解析失敗");
             return;
         }
 
@@ -1784,18 +1797,17 @@ async function startOCRAnalysis() {
 
     } catch (err) {
         console.error(err);
-        ocrStatus.style.color = '#ff6666';
-        ocrStatus.textContent = `${t('ocrStatusError')} : ${err.toString()}`;
-        progressBar.style.display = 'none';
+        showOcrTotalFailure(err.toString());
     }
 }
 
 /**
  * 81マスのgrid2D配列を受け取り、ルール違反や解の有無を判定してフロー分岐
  */
-function validateAndApplyOcrGrid(grid2D, autoPlay = false) {
+function validateAndApplyOcrGrid(grid2D, autoPlay = false, isFromManual = false) {
     let isRuleValid = true;
     let givenCount = 0;
+    let errorDetail = "";
 
     for (let r = 0; r < 9; r++) {
         for (let c = 0; c < 9; c++) {
@@ -1805,15 +1817,11 @@ function validateAndApplyOcrGrid(grid2D, autoPlay = false) {
                 grid2D[r][c] = 0;
                 if (!SudokuLogicalSolver.isValid(grid2D, r, c, num)) {
                     isRuleValid = false;
+                    errorDetail = "盤面に重複した数字があります。";
                 }
                 grid2D[r][c] = num;
             }
         }
-    }
-
-    // 数独が唯一解を持つための数学的最小ヒント数は17
-    if (givenCount < 17) {
-        isRuleValid = false;
     }
 
     let isSolvable = false;
@@ -1821,6 +1829,11 @@ function validateAndApplyOcrGrid(grid2D, autoPlay = false) {
         const gridCopy = grid2D.map(row => [...row]);
         // 解が2個以上見つかった時点で停止させる（ limit = 2 ）
         const solutionsCount = SudokuLogicalSolver.countSolutions(gridCopy, 2);
+        if (solutionsCount === 0) {
+            errorDetail = "この盤面には解が存在しません。";
+        } else if (solutionsCount > 1) {
+            errorDetail = "解が複数存在するため、一意に決定できません。";
+        }
         isSolvable = (solutionsCount === 1); // 唯一解のみを受け入れる
     }
 
@@ -1829,6 +1842,8 @@ function validateAndApplyOcrGrid(grid2D, autoPlay = false) {
     document.querySelector('.ocr-progress-container').style.display = 'none';
 
     if (isRuleValid && isSolvable) {
+        validationFailCount = 0;
+        uploadZone.style.display = 'none'; // 念のため隠す
         if (autoPlay) {
             applyGridToBoardAndCloseModal(grid2D);
         } else {
@@ -1845,18 +1860,32 @@ function validateAndApplyOcrGrid(grid2D, autoPlay = false) {
         }
     } else {
         // ルートD: ルール違反 or 解なし or 複数解 -> 手動グリッドへ
-        const manualStatePanel = document.getElementById('ocr-state-manual-grid');
-        manualStatePanel.style.display = 'flex';
-        document.querySelector('.ocr-canvas-container').style.display = 'flex';
+        validationFailCount++;
+        uploadZone.style.display = 'none'; // アップロードエリアを隠す
 
-        // メッセージを強調表示
-        const warningText = manualStatePanel.querySelector('.manual-hint');
-        if (warningText) {
-            warningText.style.backgroundColor = 'rgba(255, 204, 0, 0.2)';
-            warningText.style.padding = '5px';
-            warningText.style.borderRadius = '4px';
-            warningText.innerHTML = '⚠️ <strong>まだ間違いがあります。</strong>盤面を修正してからもう一度PLAYを押してください。';
+        const panel1 = document.getElementById('ocr-state-manual-grid');
+        const panelRetry = document.getElementById('ocr-state-manual-retry');
+
+        if (validationFailCount >= 2) {
+            panel1.style.display = 'none';
+            panelRetry.style.display = 'flex';
+            const retryHint = panelRetry.querySelector('.manual-hint-retry');
+            if (retryHint) {
+                retryHint.innerHTML = `💡 ${errorDetail || "赤い数字や重複している箇所がないか、もう一度よく確認してください。"}`;
+            }
+        } else {
+            panel1.style.display = 'flex';
+            panelRetry.style.display = 'none';
+            const manualHint = panel1.querySelector('.manual-hint');
+            if (manualHint) {
+                manualHint.style.backgroundColor = 'rgba(255, 204, 0, 0.2)';
+                manualHint.style.padding = '5px';
+                manualHint.style.borderRadius = '4px';
+                manualHint.innerHTML = `⚠️ ${errorDetail || "盤面に間違いがあるか、唯一解ではないようです。直接修正してください。"}`;
+            }
         }
+
+        document.querySelector('.ocr-canvas-container').style.display = 'flex';
 
         // 右側をインタラクティブグリッドに切り替え
         document.getElementById('ocr-parsed-preview').style.display = 'none';
@@ -1914,9 +1943,14 @@ function renderManualCorrectionGrid(grid2D) {
 }
 
 /**
- * 手動修正グリッドからのPLAYボタン処理
+ * 手動修正グリッドからのPLAYボタン処理 (共通化)
  */
-document.getElementById('btn-manual-play').addEventListener('click', () => {
+async function handleManualPlayGrid(e) {
+    const btn = e.currentTarget;
+    const oldText = btn.textContent;
+    btn.disabled = true;
+    btn.textContent = "検証中...";
+
     const inputs = document.querySelectorAll('#ocr-manual-grid input');
     const newGrid2D = Array.from({ length: 9 }, () => Array(9).fill(0));
 
@@ -1929,7 +1963,19 @@ document.getElementById('btn-manual-play').addEventListener('click', () => {
         }
     });
 
-    // 隠して再検証
-    document.getElementById('ocr-state-manual-grid').style.display = 'none';
-    validateAndApplyOcrGrid(newGrid2D, true);
-});
+    // ユーザーに「考えている」感じを出すために少しだけ待つ
+    await new Promise(r => setTimeout(r, 300));
+
+    try {
+        // パネルを隠して再検証
+        hideAllOcrStates();
+        validateAndApplyOcrGrid(newGrid2D, true, true);
+    } finally {
+        // 成功した場合はモーダルごと消えるはずだが、失敗した場合のために復元
+        btn.disabled = false;
+        btn.textContent = oldText;
+    }
+}
+
+document.getElementById('btn-manual-play').addEventListener('click', handleManualPlayGrid);
+document.getElementById('btn-manual-play-again').addEventListener('click', handleManualPlayGrid);

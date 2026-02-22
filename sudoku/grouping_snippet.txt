@@ -1,0 +1,46 @@
+        // --- ステップ 1: 未認識セルの事前グループ化 ---
+        const groups = []; // { canvas, indices: [] }
+        for (const item of currentOcrCorrectionQueue) {
+            // 安全チェック: キャンバスが有効か確認
+            if (!item.canvas || item.canvas.width === 0 || item.canvas.height === 0) {
+                groups.push({ canvas: item.canvas, indices: [item.index] });
+                continue;
+            }
+
+            let matchedGroup = null;
+            if (groups.length > 0) {
+                let itemMat = null;
+                try {
+                    itemMat = cv.imread(item.canvas);
+                    cv.cvtColor(itemMat, itemMat, cv.COLOR_RGBA2GRAY, 0);
+
+                    for (const group of groups) {
+                        if (!group.canvas || group.canvas.width === 0) continue;
+                        
+                        let groupMat = cv.imread(group.canvas);
+                        cv.cvtColor(groupMat, groupMat, cv.COLOR_RGBA2GRAY, 0);
+
+                        let res = new cv.Mat();
+                        cv.matchTemplate(itemMat, groupMat, res, cv.TM_CCOEFF_NORMED);
+                        let mm = cv.minMaxLoc(res);
+                        
+                        if (mm.maxVal > 0.85) {
+                            matchedGroup = group;
+                            res.delete(); groupMat.delete();
+                            break;
+                        }
+                        res.delete(); groupMat.delete();
+                    }
+                } catch (e) {
+                    console.warn("Grouping comparison failed for cell", item.index, e);
+                } finally {
+                    if (itemMat) itemMat.delete();
+                }
+            }
+
+            if (matchedGroup) {
+                matchedGroup.indices.push(item.index);
+            } else {
+                groups.push({ canvas: item.canvas, indices: [item.index] });
+            }
+        }

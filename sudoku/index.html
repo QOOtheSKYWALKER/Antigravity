@@ -113,7 +113,6 @@
                         認識できませんでした。</p>
                     <ul style="font-size: 0.9rem; color: var(--text-color); margin-bottom: 15px; padding-left: 20px;">
                         <li data-i18n="ocrErrorTotalReason1">スクリーンショットですか？（斜めから撮ったカメラ写真は認識しません）</li>
-                        <li data-i18n="ocrErrorTotalReason2">ライトモードですか？（ダークモードは失敗しやすいです）</li>
                     </ul>
                     <p style="text-align: center; color: #a8c7fa;" data-i18n="ocrErrorTotalHint">💡
                         ここに別の画像を再ドロップ、またはクリック</p>
@@ -151,11 +150,25 @@
             <div id="ocr-state-manual-grid" class="ocr-state-panel warning-panel" style="display: none;">
                 <p><span class="status-icon">⚠️</span> <span
                         data-i18n="ocrManualWarning1">解析した盤面になにか間違いがあるようです（重複ルール違反、または解が存在しません）。</span></p>
-                <p style="font-size: 0.85rem; color: #ffcc00; margin-top: -10px; margin-bottom: 15px;">
+                <p class="manual-hint"
+                    style="font-size: 0.85rem; color: #ffcc00; margin-top: -10px; margin-bottom: 15px;">
                     💡 右側の盤面で、間違っている数字をタップして直接修正してください。
                 </p>
                 <div class="ocr-controls">
                     <button id="btn-manual-play" class="action-btn" data-i18n="ocrManualPlayBtn">PLAY (再検証して開始)</button>
+                </div>
+            </div>
+
+            <!-- 完了ステート E: 2回目以降の再検証失敗用 -->
+            <div id="ocr-state-manual-retry" class="ocr-state-panel warning-panel" style="display: none;">
+                <p style="color: #ff4444; font-weight: bold;"><span class="status-icon">🚨</span> まだ盤面に間違いがあります！</p>
+                <p class="manual-hint-retry"
+                    style="font-size: 0.85rem; color: #ffcc00; margin-top: -10px; margin-bottom: 15px; background: rgba(255, 68, 68, 0.1); padding: 8px; border-radius: 4px;">
+                    💡 赤い数字や重複している箇所がないか、もう一度よく確認してください。
+                </p>
+                <div class="ocr-controls">
+                    <button id="btn-manual-play-again" class="action-btn" style="background: var(--primary-color);">PLAY
+                        (再検証)</button>
                 </div>
             </div>
 
