@@ -363,7 +363,7 @@
             <div class="feature-card">
                 <span class="feature-icon">🧠</span>
                 <h3>論理的ソルバー</h3>
-                <p>10種類以上の戦略（Naked Single〜W-Wing）を実装したソルバーが、パズルの難易度を厳密に判定します。</p>
+                <p>15種類以上の戦略（Naked Single〜XY-Chain）を実装したソルバーが、パズルの難易度を厳密に判定します。</p>
             </div>
             <div class="feature-card">
                 <span class="feature-icon">🎯</span>
@@ -390,6 +390,11 @@
                 <h3>テーマ & 言語設定</h3>
                 <p>ダーク/ライトモードの切り替えに加え、端末設定との連動も可能。日本語・英語の表示言語切り替えにも対応。</p>
             </div>
+            <div class="feature-card">
+                <span class="feature-icon">📸</span>
+                <h3>取込 (OCR)</h3>
+                <p>カメラや画像から数独の盤面を自動認識。OpenCV.js を使用した高度な画像処理により、手入力の手間を省いて即座にプレイ可能です。</p>
+            </div>
         </div>
     </section>
 
@@ -413,13 +418,13 @@
                 </tr>
                 <tr>
                     <td><span class="tag tag-medium">Medium</span></td>
-                    <td>Pairs, Triples</td>
-                    <td>候補のペア（2国同盟）やトリプル（3国同盟）を見つけて候補を除外する中級の推論が必要。</td>
+                    <td>Pairs, Triples, Quads</td>
+                    <td>候補のペア（2国同盟）〜クアッド（4国同盟）を見つけて候補を除外する中級の推論が必要。</td>
                 </tr>
                 <tr>
                     <td><span class="tag tag-hard">Hard</span></td>
-                    <td>X-Wing, Y-Wing, Swordfish 等</td>
-                    <td>行列をまたぐフィッシュ系パターンや、強弱リンクを使った高度な多段階推論が必要。</td>
+                    <td>Fish系, Wings, UR, Chains</td>
+                    <td>Jellyfish 等の高度な魚系、Unique Rectangle（唯一解）、XY-Chain 等の多段階推論が必要。</td>
                 </tr>
             </tbody>
         </table>
@@ -467,7 +472,8 @@
             <span class="tech-badge">JavaScript (ES6+)</span>
             <span class="tech-badge">CSS Grid / Flexbox</span>
             <span class="tech-badge">GitHub Pages</span>
-            <span class="tech-badge">論理的ソルバー (10+ 戦略)</span>
+            <span class="tech-badge">OpenCV.js (OCR)</span>
+            <span class="tech-badge">論理的ソルバー (15+ 戦略)</span>
             <span class="tech-badge">バックトラッキング (唯一解検証)</span>
         </div>
     </section>

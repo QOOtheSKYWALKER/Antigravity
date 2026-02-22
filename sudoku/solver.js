@@ -87,14 +87,13 @@ class SudokuLogicalSolver {
             if (this.applyNakedSingle()) { changed = true; continue; }
             if (this.applyHiddenSingle()) { changed = true; continue; }
 
-            // 2. Easy (Reserved for future easy techniques)
+            // 2. Easy (Locked Candidates)
             if (maxRank >= 2) {
-                // Currently no specific easy techniques after singles
+                if (this.applyLockedCandidates()) { changed = true; continue; }
             }
 
-            // 3. Medium (Locked Candidates, Pairs, Triples, Quads)
+            // 3. Medium (Pairs, Triples, Quads)
             if (maxRank >= 3) {
-                if (this.applyLockedCandidates()) { changed = true; continue; }
                 if (this.applyNakedPair()) { changed = true; continue; }
                 if (this.applyHiddenPair()) { changed = true; continue; }
                 if (this.applyNakedTriple()) { changed = true; continue; }
@@ -141,9 +140,9 @@ class SudokuLogicalSolver {
         const levels = {
             'Naked Single': 'basic',
             'Hidden Single': 'basic',
-            'Locked Candidates': 'medium',
-            'Locked Candidates (Pointing)': 'medium',
-            'Locked Candidates (Claiming)': 'medium',
+            'Locked Candidates': 'easy',
+            'Locked Candidates (Pointing)': 'easy',
+            'Locked Candidates (Claiming)': 'easy',
             'Naked Pair': 'medium',
             'Hidden Pair': 'medium',
             'Naked Triple': 'medium',
