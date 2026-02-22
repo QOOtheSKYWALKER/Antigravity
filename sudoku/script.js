@@ -1040,7 +1040,6 @@ function handleFile(file) {
             ctx.drawImage(img, 0, 0);
 
             ocrStatus.textContent = t('ocrStatusLoaded');
-            progressBar.style.display = 'none';
 
             cellCanvases = [];
             manualCorrectionCache = [];
@@ -1104,54 +1103,150 @@ function processImageWithOpenCV() {
             let blurred = new cv.Mat();
             cv.GaussianBlur(gray, blurred, new cv.Size(5, 5), 0, 0, cv.BORDER_DEFAULT);
 
+            // 1. 適応的2値化（反転）
+            // 局所的な明るさの差を拾うため、ダークモードの暗い枠線も白く浮き上がる。
             let thresh = new cv.Mat();
-            if (isDarkMode) {
-                cv.adaptiveThreshold(blurred, thresh, 255, cv.ADAPTIVE_THRESH_GAUSSIAN_C, cv.THRESH_BINARY, 11, -2);
-            } else {
-                cv.adaptiveThreshold(blurred, thresh, 255, cv.ADAPTIVE_THRESH_GAUSSIAN_C, cv.THRESH_BINARY_INV, 11, 2);
-            }
+            cv.adaptiveThreshold(blurred, thresh, 255, cv.ADAPTIVE_THRESH_GAUSSIAN_C, cv.THRESH_BINARY_INV, 11, 2);
 
+            // 2. モルフォロジー演算によるライン抽出
+            let horizontal = thresh.clone();
+            let vertical = thresh.clone();
+
+            let scale = 20; // 盤面サイズの1/20程度の線を拾う
+            let horizontalSize = Math.floor(horizontal.cols / scale);
+            let horizontalStructure = cv.getStructuringElement(cv.MORPH_RECT, new cv.Size(horizontalSize, 1));
+            cv.erode(horizontal, horizontal, horizontalStructure);
+            cv.dilate(horizontal, horizontal, horizontalStructure);
+
+            let verticalSize = Math.floor(vertical.rows / scale);
+            let verticalStructure = cv.getStructuringElement(cv.MORPH_RECT, new cv.Size(1, verticalSize));
+            cv.erode(vertical, vertical, verticalStructure);
+            cv.dilate(vertical, vertical, verticalStructure);
+
+            // 3. マスクの合成（水平 + 垂直）
+            let mask = new cv.Mat();
+            cv.add(horizontal, vertical, mask);
+
+            // 4. 枠（最大の正方形に近い矩形）を抽出
             let contours = new cv.MatVector();
             let hierarchy = new cv.Mat();
-            cv.findContours(thresh, contours, hierarchy, cv.RETR_EXTERNAL, cv.CHAIN_APPROX_SIMPLE);
+            cv.findContours(mask, contours, hierarchy, cv.RETR_EXTERNAL, cv.CHAIN_APPROX_SIMPLE);
 
             let maxArea = 0;
-            let maxContourIndex = -1;
+            let bestRect = null;
+
             for (let i = 0; i < contours.size(); ++i) {
                 let cnt = contours.get(i);
-                let area = cv.contourArea(cnt);
-                if (area > maxArea) {
+                let rect = cv.boundingRect(cnt);
+                let area = rect.width * rect.height;
+                let aspect = rect.width / rect.height;
+
+                // アスペクト比がほぼ1:1かつ十分な面積を持つものを探す
+                if (aspect > 0.7 && aspect < 1.3 && area > maxArea) {
                     maxArea = area;
-                    maxContourIndex = i;
+                    bestRect = rect;
+                }
+                cnt.delete(); // 個別輪郭の解放
+            }
+
+            if (!bestRect || maxArea < 10000) {
+                // 枠の特定に失敗した場合はエラーとして中断する
+                throw new Error("数独の枠（盤面）を特定できませんでした。スクリーンショットであること、または盤面が歪んでいないか確認してください。");
+            }
+
+            // メモリ解放: 枠検出用の中間Mat
+            horizontal.delete(); vertical.delete(); mask.delete();
+            horizontalStructure.delete(); verticalStructure.delete();
+            contours.delete(); hierarchy.delete();
+            contours = null; hierarchy = null; // 二重解放防止
+
+            // 盤面の切り出し
+            let boardMatRaw = src.roi(bestRect);
+            let boardMatBig = new cv.Mat();
+            let dsizeBig = new cv.Size(boardMatRaw.cols * 4, boardMatRaw.rows * 4);
+            cv.resize(boardMatRaw, boardMatBig, dsizeBig, 0, 0, cv.INTER_CUBIC);
+
+            // グローバルな2値化処理は廃止し、マス単位（Per-Cell Otsu）に変更
+            // ハイライトや一部の暗いセルへの耐性を高めるため
+            let grayBig = new cv.Mat();
+            cv.cvtColor(boardMatBig, grayBig, cv.COLOR_RGBA2GRAY, 0);
+
+            const cellWidthBig = grayBig.cols / 9;
+            const cellHeightBig = grayBig.rows / 9;
+            const marginWBig = cellWidthBig * 0.03;
+            const marginHBig = cellHeightBig * 0.03;
+
+            // --- Phase 1: 面積統計の収集 ---
+            ocrStatus.textContent = '盤面の統計情報を解析中...';
+            let maxAreas = [];
+            for (let r = 0; r < 9; r++) {
+                for (let c = 0; c < 9; c++) {
+                    let x = Math.floor(c * cellWidthBig + marginWBig);
+                    let y = Math.floor(r * cellHeightBig + marginHBig);
+                    let w = Math.floor(cellWidthBig - marginWBig * 2);
+                    let h = Math.floor(cellHeightBig - marginHBig * 2);
+
+                    let rect = new cv.Rect(x, y, w, h);
+                    let cellGray = grayBig.roi(rect);
+
+                    // 各マスごとに最適なしきい値を決定
+                    let cellThresh = new cv.Mat();
+                    if (isDarkMode) {
+                        cv.threshold(cellGray, cellThresh, 0, 255, cv.THRESH_BINARY | cv.THRESH_OTSU);
+                    } else {
+                        cv.threshold(cellGray, cellThresh, 0, 255, cv.THRESH_BINARY_INV | cv.THRESH_OTSU);
+                    }
+
+                    let labels = new cv.Mat();
+                    let stats = new cv.Mat();
+                    let centroids = new cv.Mat();
+                    let nLabels = cv.connectedComponentsWithStats(cellThresh, labels, stats, centroids);
+
+                    let currentMax = 0;
+                    for (let i = 1; i < nLabels; i++) {
+                        let cl = stats.intAt(i, cv.CC_STAT_LEFT);
+                        let ct = stats.intAt(i, cv.CC_STAT_TOP);
+                        let cw = stats.intAt(i, cv.CC_STAT_WIDTH);
+                        let ch = stats.intAt(i, cv.CC_STAT_HEIGHT);
+                        let area = stats.intAt(i, cv.CC_STAT_AREA);
+
+                        // 4倍解像度のため 4px マージン
+                        let isTouching = (cl <= 4 || ct <= 4 || (cl + cw) >= cellThresh.cols - 4 || (ct + ch) >= cellThresh.rows - 4);
+                        if (!isTouching && area > currentMax) currentMax = area;
+                    }
+                    if (currentMax > 0) maxAreas.push(currentMax);
+
+                    labels.delete(); stats.delete(); centroids.delete(); cellThresh.delete(); cellGray.delete();
                 }
             }
 
-            if (maxContourIndex === -1) {
-                throw new Error("盤面の輪郭が見つかりませんでした。");
-            }
+            let absoluteMaxArea = maxAreas.length > 0 ? Math.max(...maxAreas) : 0;
+            let dynamicThreshold = Math.max(absoluteMaxArea * 0.25, cellWidthBig * cellHeightBig * 0.015);
 
-            let cnt = contours.get(maxContourIndex);
-            let rect = cv.boundingRect(cnt);
-
-            let boardMat = src.roi(rect);
-
-            // 81個分のキャンバスを生成してOCR用に保持
+            // 81個分のキャンバスを生成
             cellCanvases = [];
 
-            let cellWidth = boardMat.cols / 9;
-            let cellHeight = boardMat.rows / 9;
-
+            // --- Phase 2: 文字の抽出と保存 ---
+            ocrStatus.textContent = t('ocrStatusExtracting');
             for (let row = 0; row < 9; row++) {
                 for (let col = 0; col < 9; col++) {
-                    let cellRect = new cv.Rect(
-                        Math.round(col * cellWidth),
-                        Math.round(row * cellHeight),
-                        Math.round(cellWidth),
-                        Math.round(cellHeight)
-                    );
+                    let x = Math.floor(col * cellWidthBig + marginWBig);
+                    let y = Math.floor(row * cellHeightBig + marginHBig);
+                    let w = Math.floor(cellWidthBig - marginWBig * 2);
+                    let h = Math.floor(cellHeightBig - marginHBig * 2);
 
-                    let cellMat = boardMat.roi(cellRect);
-                    let processedCell = preprocessCell(cellMat, isDarkMode);
+                    let rect = new cv.Rect(x, y, w, h);
+                    let cellGray = grayBig.roi(rect);
+
+                    // 再度2値化
+                    let cellThresh = new cv.Mat();
+                    if (isDarkMode) {
+                        cv.threshold(cellGray, cellThresh, 0, 255, cv.THRESH_BINARY | cv.THRESH_OTSU);
+                    } else {
+                        cv.threshold(cellGray, cellThresh, 0, 255, cv.THRESH_BINARY_INV | cv.THRESH_OTSU);
+                    }
+
+                    let processedCell = preprocessCell(cellThresh, dynamicThreshold);
 
                     let canvas = document.createElement('canvas');
                     canvas.width = processedCell.mat.cols;
@@ -1159,16 +1254,18 @@ function processImageWithOpenCV() {
                     cv.imshow(canvas, processedCell.mat);
                     canvas.dataset.hasDigit = processedCell.hasDigit;
 
-
                     cellCanvases.push(canvas);
 
                     processedCell.mat.delete();
-                    cellMat.delete();
+                    cellThresh.delete();
+                    cellGray.delete();
                 }
             }
 
             src.delete(); gray.delete(); blurred.delete(); thresh.delete();
-            contours.delete(); hierarchy.delete(); boardMat.delete();
+            if (contours) contours.delete();
+            if (hierarchy) hierarchy.delete();
+            boardMatRaw.delete(); boardMatBig.delete(); grayBig.delete();
 
             resolve();
         } catch (err) {
@@ -1177,17 +1274,15 @@ function processImageWithOpenCV() {
     });
 }
 
-function preprocessCell(cellMat, isDarkMode) {
-    let gray = new cv.Mat();
-    cv.cvtColor(cellMat, gray, cv.COLOR_RGBA2GRAY, 0);
-
-    let thresh = new cv.Mat();
-    if (isDarkMode) {
-        cv.threshold(gray, thresh, 0, 255, cv.THRESH_BINARY | cv.THRESH_OTSU);
-    } else {
-        cv.threshold(gray, thresh, 0, 255, cv.THRESH_BINARY_INV | cv.THRESH_OTSU);
-    }
-
+/**
+ * セル内の数字を孤立化させ、中央に配置する前処理
+ * 既に2値化された4倍解像度データを受け取り、成形を行う
+ * @param {cv.Mat} thresh 2値化済みセル画像
+ * @param {number} dynamicThreshold 数字として認める最小面積
+ * @returns {{mat: cv.Mat, hasDigit: boolean}} 処理済みMatと、文字が存在するかのフラグ
+ */
+function preprocessCell(thresh, dynamicThreshold) {
+    // 連結成分解析による数字の特定
     let labels = new cv.Mat();
     let stats = new cv.Mat();
     let centroids = new cv.Mat();
@@ -1203,7 +1298,8 @@ function preprocessCell(cellMat, isDarkMode) {
         let height = stats.intAt(i, cv.CC_STAT_HEIGHT);
         let area = stats.intAt(i, cv.CC_STAT_AREA);
 
-        let isTouchingBorder = (left <= 1 || top <= 1 || (left + width) >= thresh.cols - 1 || (top + height) >= thresh.rows - 1);
+        // 枠線の除去: 4x超解像のため 4px マージン
+        let isTouchingBorder = (left <= 4 || top <= 4 || (left + width) >= thresh.cols - 4 || (top + height) >= thresh.rows - 4);
 
         if (!isTouchingBorder) {
             if (area > maxArea) {
@@ -1213,19 +1309,23 @@ function preprocessCell(cellMat, isDarkMode) {
         }
     }
 
+    // 出力用のキャンバスを作成（白背景）
     let output = new cv.Mat.ones(thresh.rows, thresh.cols, cv.CV_8UC1);
-    output.setTo(new cv.Scalar(255));
+    output.setTo(new cv.Scalar(255)); // 白で埋める
 
     let hasDigit = false;
 
-    if (bestRect && maxArea > (thresh.rows * thresh.cols * 0.005)) {
+    // 数字が見つかった場合、中央に配置
+    if (bestRect && maxArea >= dynamicThreshold) {
         hasDigit = true;
         let digitROI = thresh.roi(bestRect);
+
         let targetX = Math.floor((output.cols - bestRect.width) / 2);
         let targetY = Math.floor((output.rows - bestRect.height) / 2);
         let targetRect = new cv.Rect(targetX, targetY, bestRect.width, bestRect.height);
 
         let processedDigit = new cv.Mat();
+        // 白背景用反転（文字を黒にする）
         cv.bitwise_not(digitROI, processedDigit);
         processedDigit.copyTo(output.roi(targetRect));
 
@@ -1233,70 +1333,98 @@ function preprocessCell(cellMat, isDarkMode) {
         digitROI.delete();
     }
 
-    gray.delete(); thresh.delete();
+    // メモリ解放
     labels.delete(); stats.delete(); centroids.delete();
 
     return { mat: output, hasDigit: hasDigit };
 }
 
-// 対話的エラー修正モーダルのPromiseラッパー
-function showModalPrompt(canvas, currentIndex = 1, totalCount = 1) {
+// 対話的エラー修正モーダルのPromiseラッパー（一括リスト版）
+function showBulkCorrectionModal(groups) {
     return new Promise((resolve) => {
         const modal = document.getElementById('ocr-correction-modal');
-        const img = document.getElementById('modal-cell-image');
-        const input = document.getElementById('modal-digit-input');
+        const listContainer = document.getElementById('ocr-correction-list');
         const btnSubmit = document.getElementById('modal-btn-submit');
         const btnSkip = document.getElementById('modal-btn-skip');
         const stepCounter = document.getElementById('modal-step-counter');
 
-        input.value = ''; // 確実にここで空にする
-        img.src = canvas.toDataURL('image/png');
+        listContainer.innerHTML = '';
+        stepCounter.textContent = `(${groups.length} groups)`;
 
-        // ステップカウンターの表示とボタンテキストの切り替え
-        stepCounter.textContent = `(${currentIndex} / ${totalCount})`;
-        if (currentIndex === totalCount) {
-            btnSubmit.textContent = 'Verify & Play (Enter)';
-        } else {
-            btnSubmit.textContent = '確定 (Enter)';
-        }
+        const inputMap = new Map(); // group -> input element
+
+        groups.forEach((group, i) => {
+            const item = document.createElement('div');
+            item.className = 'correction-item';
+
+            const img = document.createElement('img');
+            img.src = group.canvas.toDataURL('image/png');
+            img.alt = `cell-${i}`;
+
+            const input = document.createElement('input');
+            input.type = 'number';
+            input.min = '1';
+            input.max = '9';
+            input.placeholder = '?';
+            input.inputMode = 'numeric';
+            input.pattern = '[0-9]*';
+
+            // Enterキーで次の入力欄へ移動、または確定
+            input.addEventListener('keydown', (e) => {
+                if (e.key === 'Enter') {
+                    const inputs = Array.from(listContainer.querySelectorAll('input'));
+                    const idx = inputs.indexOf(input);
+                    if (idx < inputs.length - 1) {
+                        inputs[idx + 1].focus();
+                    } else {
+                        onSubmit();
+                    }
+                }
+            });
+
+            item.appendChild(img);
+            item.appendChild(input);
+            listContainer.appendChild(item);
+            inputMap.set(group, input);
+        });
 
         modal.style.display = 'flex';
-        input.value = '';
-        input.focus();
+        // 最初の入力欄にフォーカス
+        const firstInput = listContainer.querySelector('input');
+        if (firstInput) firstInput.focus();
 
-        const cleanupAndResolve = (value) => {
+        const cleanupAndResolve = (results) => {
             modal.style.display = 'none';
-            input.value = ''; // 確実にここで空にしておく
             btnSubmit.removeEventListener('click', onSubmit);
             btnSkip.removeEventListener('click', onSkip);
-            input.removeEventListener('keydown', onKeydown);
-            resolve(value);
+            window.removeEventListener('keydown', onGlobalKeydown);
+            resolve(results);
         };
 
         const onSubmit = () => {
-            const val = parseInt(input.value);
-            if (!isNaN(val) && val >= 1 && val <= 9) {
-                cleanupAndResolve(val);
-            } else {
-                input.focus();
-            }
+            const results = [];
+            groups.forEach(group => {
+                const input = inputMap.get(group);
+                const val = parseInt(input.value) || 0;
+                results.push({ group, val });
+            });
+            cleanupAndResolve(results);
         };
 
         const onSkip = () => {
-            cleanupAndResolve(0);
+            const results = groups.map(group => ({ group, val: 0 }));
+            cleanupAndResolve(results);
         };
 
-        const onKeydown = (e) => {
-            if (e.key === 'Enter') {
-                onSubmit();
-            } else if (e.key === 'Escape') {
+        const onGlobalKeydown = (e) => {
+            if (e.key === 'Escape') {
                 onSkip();
             }
         };
 
         btnSubmit.addEventListener('click', onSubmit);
         btnSkip.addEventListener('click', onSkip);
-        input.addEventListener('keydown', onKeydown);
+        window.addEventListener('keydown', onGlobalKeydown);
     });
 }
 
@@ -1395,34 +1523,79 @@ document.getElementById('btn-state-play').addEventListener('click', () => {
     }
 });
 
-document.getElementById('btn-state-input').addEventListener('click', async () => {
+// 手動による未認識マスの補正を開始（State Cでの「入力する」またはグリッドクリック時）
+async function startManualCorrectionFlow() {
+    if (document.getElementById('ocr-state-partial-fail').style.display === 'none' &&
+        document.getElementById('ocr-correction-modal').style.display !== 'none') {
+        return; // 既に実行中なら何もしない
+    }
+
     try {
         document.getElementById('ocr-state-partial-fail').style.display = 'none';
-        ocrStatus.textContent = '一部の数字が認識できませんでした。手動で補正してください...';
+        ocrStatus.textContent = '未認識の数字をグループ化して、一括で補正します...';
         ocrStatus.style.color = '#ffcc00';
 
-        // 遅延キューを処理
-        const totalCount = currentOcrCorrectionQueue.length;
-        let currentIndex = 1;
-
+        // --- ステップ 1: 未認識セルの事前グループ化 ---
+        const groups = []; // { canvas, indices: [] }
         for (const item of currentOcrCorrectionQueue) {
-            const correctedNum = await showModalPrompt(item.canvas, currentIndex, totalCount);
-            if (correctedNum !== 0) {
-                let cacheMat = cv.imread(item.canvas);
-                cv.cvtColor(cacheMat, cacheMat, cv.COLOR_RGBA2GRAY, 0);
-                manualCorrectionCache.push({ mat: cacheMat, digit: correctedNum });
+            let matchedGroup = null;
+            if (groups.length > 0) {
+                let itemMat = cv.imread(item.canvas);
+                cv.cvtColor(itemMat, itemMat, cv.COLOR_RGBA2GRAY, 0);
+
+                for (const group of groups) {
+                    let groupMat = cv.imread(group.canvas);
+                    cv.cvtColor(groupMat, groupMat, cv.COLOR_RGBA2GRAY, 0);
+
+                    let res = new cv.Mat();
+                    cv.matchTemplate(itemMat, groupMat, res, cv.TM_CCOEFF_NORMED);
+                    let mm = cv.minMaxLoc(res);
+
+                    if (mm.maxVal > 0.85) { // ユーザー指定の 0.85
+                        matchedGroup = group;
+                        res.delete(); groupMat.delete();
+                        break;
+                    }
+                    res.delete(); groupMat.delete();
+                }
+                itemMat.delete();
             }
-            currentGridResult[item.index] = correctedNum;
-            currentIndex++;
+
+            if (matchedGroup) {
+                matchedGroup.indices.push(item.index);
+            } else {
+                groups.push({ canvas: item.canvas, indices: [item.index] });
+            }
         }
 
-        // 補正後、再度検証へ（完了後はPLAY画面へ直行）
+        // --- ステップ 2: グループ単位での対話的修正 ---
+        const results = await showBulkCorrectionModal(groups);
+
+        for (const res of results) {
+            const { group, val } = res;
+            // グループ全体に回答を適用
+            for (const idx of group.indices) {
+                currentGridResult[idx] = val;
+            }
+
+            // キャッシュへの登録
+            if (val !== 0) {
+                let cacheMat = cv.imread(group.canvas);
+                cv.cvtColor(cacheMat, cacheMat, cv.COLOR_RGBA2GRAY, 0);
+                manualCorrectionCache.push({ mat: cacheMat, digit: val });
+            }
+        }
+
+        // 補正後、再度検証へ
         proceedToValidation(currentGridResult, true);
     } catch (err) {
         console.error(err);
         ocrStatus.textContent = err.toString();
     }
-});
+}
+
+document.getElementById('btn-state-input').addEventListener('click', startManualCorrectionFlow);
+document.getElementById('ocr-parsed-preview').addEventListener('click', startManualCorrectionFlow);
 
 function proceedToValidation(grid1D, autoPlay = false) {
     const grid2D = [];
@@ -1443,6 +1616,10 @@ async function startOCRAnalysis() {
 
     ocrStatus.style.color = '#ffcc00';
     ocrStatus.textContent = t('ocrStatusLoading');
+
+    // コンテナたちが非表示にならないように強制
+    document.querySelector('.ocr-progress-container').style.display = 'block';
+    document.querySelector('.ocr-canvas-container').style.display = 'flex';
     progressBar.style.display = 'block';
     progressFill.style.width = '0%';
 
@@ -1453,8 +1630,49 @@ async function startOCRAnalysis() {
 
         await processImageWithOpenCV();
 
-        const gridResult = [];
+        const gridResult = new Array(81).fill(0);
+        const cellCanvasesWithDigits = [];
 
+        for (let i = 0; i < 81; i++) {
+            if (cellCanvases[i].dataset.hasDigit === 'true') {
+                cellCanvasesWithDigits.push({ index: i, canvas: cellCanvases[i] });
+            }
+        }
+
+        // --- ステップ 1: 事前グループ化 (一致度85%) ---
+        const groups = []; // { canvases: [], indices: [] }
+        for (const item of cellCanvasesWithDigits) {
+            let matchedGroup = null;
+            let itemMat = cv.imread(item.canvas);
+            cv.cvtColor(itemMat, itemMat, cv.COLOR_RGBA2GRAY, 0);
+
+            for (const group of groups) {
+                let repCanvas = group.canvases[0];
+                let repMat = cv.imread(repCanvas);
+                cv.cvtColor(repMat, repMat, cv.COLOR_RGBA2GRAY, 0);
+
+                let res = new cv.Mat();
+                cv.matchTemplate(itemMat, repMat, res, cv.TM_CCOEFF_NORMED);
+                let mm = cv.minMaxLoc(res);
+
+                if (mm.maxVal > 0.85) {
+                    matchedGroup = group;
+                    res.delete(); repMat.delete();
+                    break;
+                }
+                res.delete(); repMat.delete();
+            }
+            itemMat.delete();
+
+            if (matchedGroup) {
+                matchedGroup.canvases.push(item.canvas);
+                matchedGroup.indices.push(item.index);
+            } else {
+                groups.push({ canvases: [item.canvas], indices: [item.index] });
+            }
+        }
+
+        // --- ステップ 2: グループ単位でのOCR処理 ---
         const worker = await Tesseract.createWorker('eng');
         await worker.setParameters({
             tessedit_char_whitelist: '0123456789',
@@ -1462,55 +1680,62 @@ async function startOCRAnalysis() {
         });
 
         ocrStatus.textContent = t('ocrStatusExtracting');
-
         const correctionQueue = [];
+        let processedCellsCount = 0;
 
-        for (let i = 0; i < 81; i++) {
-            const canvas = cellCanvases[i];
-            const definitelyHasDigit = canvas.dataset.hasDigit === 'true';
+        for (const group of groups) {
+            let recognizedNum = 0;
 
-            const ret = await worker.recognize(canvas);
-            const text = ret.data.text.trim();
+            // まずはキャッシュ（過去の手入力修正結果）と照合
+            if (manualCorrectionCache.length > 0) {
+                let repCanvas = group.canvases[0];
+                let currentMat = cv.imread(repCanvas);
+                cv.cvtColor(currentMat, currentMat, cv.COLOR_RGBA2GRAY, 0);
 
-            let num = 0;
-            if (text.length === 1 && text >= '1' && text <= '9') {
-                num = parseInt(text, 10);
-            }
-
-            if (definitelyHasDigit && num === 0) {
-                canvas.style.border = '3px solid #ff0000';
-
-                let matchedNumber = null;
-                if (manualCorrectionCache.length > 0) {
-                    let currentMat = cv.imread(canvas);
-                    cv.cvtColor(currentMat, currentMat, cv.COLOR_RGBA2GRAY, 0);
-
-                    for (const cache of manualCorrectionCache) {
-                        let result = new cv.Mat();
-                        cv.matchTemplate(currentMat, cache.mat, result, cv.TM_CCOEFF_NORMED);
-                        let minMax = cv.minMaxLoc(result);
-
-                        if (minMax.maxVal > 0.95) {
-                            matchedNumber = cache.digit;
-                            result.delete();
-                            break;
-                        }
-                        result.delete();
+                for (const cache of manualCorrectionCache) {
+                    let res = new cv.Mat();
+                    cv.matchTemplate(currentMat, cache.mat, res, cv.TM_CCOEFF_NORMED);
+                    let mm = cv.minMaxLoc(res);
+                    if (mm.maxVal > 0.85) {
+                        recognizedNum = cache.digit;
+                        res.delete();
+                        break;
                     }
-                    currentMat.delete();
+                    res.delete();
                 }
-
-                if (matchedNumber !== null) {
-                    num = matchedNumber;
-                } else {
-                    correctionQueue.push({ index: i, canvas: canvas });
-                }
-
-                canvas.style.border = '1px solid var(--border-color)';
+                currentMat.delete();
             }
 
-            gridResult.push(num);
-            progressFill.style.width = `${Math.round(((i + 1) / 81) * 100)}%`;
+            // キャッシュになければOCR
+            if (recognizedNum === 0) {
+                for (const canvas of group.canvases) {
+                    const ret = await worker.recognize(canvas);
+                    const text = ret.data.text.trim();
+                    let num = 0;
+                    if (text.length === 1 && text >= '1' && text <= '9') {
+                        num = parseInt(text, 10);
+                    }
+
+                    if (num !== 0) {
+                        recognizedNum = num;
+                        break; // 誰か1人でも成功すればそのグループは確定
+                    }
+                }
+            }
+
+            if (recognizedNum !== 0) {
+                for (const idx of group.indices) {
+                    gridResult[idx] = recognizedNum;
+                }
+            } else {
+                // グループ全員失敗した場合は後で手入力
+                for (const idx of group.indices) {
+                    correctionQueue.push({ index: idx, canvas: cellCanvases[idx] });
+                }
+            }
+
+            processedCellsCount += group.indices.length;
+            progressFill.style.width = `${Math.round((processedCellsCount / 81) * 100)}%`;
         }
 
         await worker.terminate();
@@ -1620,12 +1845,18 @@ function validateAndApplyOcrGrid(grid2D, autoPlay = false) {
         }
     } else {
         // ルートD: ルール違反 or 解なし or 複数解 -> 手動グリッドへ
-        let errorMsg = !isRuleValid
-            ? '盤面にルール違反（同じ列・行・ブロックに重複）があります。'
-            : '問題が複数解を持つか、一意な解が存在しません。';
-
-        document.getElementById('ocr-state-manual-grid').style.display = 'flex';
+        const manualStatePanel = document.getElementById('ocr-state-manual-grid');
+        manualStatePanel.style.display = 'flex';
         document.querySelector('.ocr-canvas-container').style.display = 'flex';
+
+        // メッセージを強調表示
+        const warningText = manualStatePanel.querySelector('p:nth-child(2)');
+        if (warningText) {
+            warningText.style.backgroundColor = 'rgba(255, 204, 0, 0.2)';
+            warningText.style.padding = '5px';
+            warningText.style.borderRadius = '4px';
+            warningText.innerHTML = '⚠️ <strong>まだ間違いがあります。</strong>盤面を修正してからもう一度PLAYを押してください。';
+        }
 
         // 右側をインタラクティブグリッドに切り替え
         document.getElementById('ocr-parsed-preview').style.display = 'none';

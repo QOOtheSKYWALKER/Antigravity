@@ -151,6 +151,9 @@
             <div id="ocr-state-manual-grid" class="ocr-state-panel warning-panel" style="display: none;">
                 <p><span class="status-icon">⚠️</span> <span
                         data-i18n="ocrManualWarning1">解析した盤面になにか間違いがあるようです（重複ルール違反、または解が存在しません）。</span></p>
+                <p style="font-size: 0.85rem; color: #ffcc00; margin-top: -10px; margin-bottom: 15px;">
+                    💡 右側の盤面で、間違っている数字をタップして直接修正してください。
+                </p>
                 <div class="ocr-controls">
                     <button id="btn-manual-play" class="action-btn" data-i18n="ocrManualPlayBtn">PLAY (再検証して開始)</button>
                 </div>
@@ -178,15 +181,22 @@
     <!-- ===== Interactive OCR Error Correction Modal (Nested or Peer) ===== -->
     <div id="ocr-correction-modal" class="ocr-correction-overlay" style="display: none;">
         <div class="ocr-correction-box">
-            <h3><span class="ocr-correction-title-text">認識エラー</span> <span id="modal-step-counter"
+            <h3><span class="ocr-correction-title-text">認識エラーの修正</span> <span id="modal-step-counter"
                     style="font-size: 0.9rem; color: #888; font-weight: normal; margin-left: 10px;"></span></h3>
-            <p>このマスの数字は何ですか？</p>
-            <img id="modal-cell-image" alt="エラーマス画像">
-            <input type="number" id="modal-digit-input" min="1" max="9" inputmode="numeric" pattern="[0-9]*"
-                placeholder="1-9">
+            <p>画像を見て、正しい数字を入力してください。</p>
+
+            <div id="ocr-correction-list" class="ocr-correction-list">
+                <!-- JSで動的に追加される: 
+                <div class="correction-item">
+                    <img src="..." alt="cell">
+                    <input type="number" min="1" max="9">
+                </div>
+                -->
+            </div>
+
             <div class="modal-buttons">
-                <button id="modal-btn-submit">確定 (Enter)</button>
-                <button id="modal-btn-skip" class="modal-skip">空マスにする (Esc)</button>
+                <button id="modal-btn-submit">確定して反映</button>
+                <button id="modal-btn-skip" class="modal-skip">すべて空マスにする (Esc)</button>
             </div>
         </div>
     </div>
