@@ -1128,6 +1128,11 @@ function processImageWithOpenCV() {
             let mask = new cv.Mat();
             cv.add(horizontal, vertical, mask);
 
+            // 隙間を埋めるための膨張処理 (角の接続を強化)
+            let kernel = cv.getStructuringElement(cv.MORPH_RECT, new cv.Size(3, 3));
+            cv.dilate(mask, mask, kernel);
+            kernel.delete();
+
             // 4. 枠（最大の正方形に近い矩形）を抽出
             let contours = new cv.MatVector();
             let hierarchy = new cv.Mat();
@@ -1177,9 +1182,9 @@ function processImageWithOpenCV() {
             const marginWBig = cellWidthBig * 0.03;
             const marginHBig = cellHeightBig * 0.03;
 
-            // --- Phase 1: 面積統計の収集 ---
+            // --- Phase 1: 高さ率の統計収集 ---
             ocrStatus.textContent = '盤面の統計情報を解析中...';
-            let maxAreas = [];
+            let maxHeightRatios = [];
             for (let r = 0; r < 9; r++) {
                 for (let c = 0; c < 9; c++) {
                     let x = Math.floor(c * cellWidthBig + marginWBig);
@@ -1190,7 +1195,6 @@ function processImageWithOpenCV() {
                     let rect = new cv.Rect(x, y, w, h);
                     let cellGray = grayBig.roi(rect);
 
-                    // 各マスごとに最適なしきい値を決定
                     let cellThresh = new cv.Mat();
                     if (isDarkMode) {
                         cv.threshold(cellGray, cellThresh, 0, 255, cv.THRESH_BINARY | cv.THRESH_OTSU);
@@ -1203,26 +1207,28 @@ function processImageWithOpenCV() {
                     let centroids = new cv.Mat();
                     let nLabels = cv.connectedComponentsWithStats(cellThresh, labels, stats, centroids);
 
-                    let currentMax = 0;
+                    let currentMaxRatio = 0;
                     for (let i = 1; i < nLabels; i++) {
                         let cl = stats.intAt(i, cv.CC_STAT_LEFT);
                         let ct = stats.intAt(i, cv.CC_STAT_TOP);
                         let cw = stats.intAt(i, cv.CC_STAT_WIDTH);
                         let ch = stats.intAt(i, cv.CC_STAT_HEIGHT);
-                        let area = stats.intAt(i, cv.CC_STAT_AREA);
 
-                        // 4倍解像度のため 4px マージン
+                        let ratio = ch / cellHeightBig;
+                        // 枠（95%以上）を除外して統計をとる
                         let isTouching = (cl <= 4 || ct <= 4 || (cl + cw) >= cellThresh.cols - 4 || (ct + ch) >= cellThresh.rows - 4);
-                        if (!isTouching && area > currentMax) currentMax = area;
+                        if (!isTouching && ratio <= 0.95) {
+                            if (ratio > currentMaxRatio) currentMaxRatio = ratio;
+                        }
                     }
-                    if (currentMax > 0) maxAreas.push(currentMax);
+                    if (currentMaxRatio > 0) maxHeightRatios.push(currentMaxRatio);
 
                     labels.delete(); stats.delete(); centroids.delete(); cellThresh.delete(); cellGray.delete();
                 }
             }
 
-            let absoluteMaxArea = maxAreas.length > 0 ? Math.max(...maxAreas) : 0;
-            let dynamicThreshold = Math.max(absoluteMaxArea * 0.25, cellWidthBig * cellHeightBig * 0.015);
+            let globalMaxHeightRatio = maxHeightRatios.length > 0 ? Math.max(...maxHeightRatios) : 0;
+            console.log("Global Max Height Ratio:", globalMaxHeightRatio);
 
             // 81個分のキャンバスを生成
             cellCanvases = [];
@@ -1247,7 +1253,7 @@ function processImageWithOpenCV() {
                         cv.threshold(cellGray, cellThresh, 0, 255, cv.THRESH_BINARY_INV | cv.THRESH_OTSU);
                     }
 
-                    let processedCell = preprocessCell(cellThresh, dynamicThreshold);
+                    let processedCell = preprocessCell(cellThresh, globalMaxHeightRatio);
 
                     let canvas = document.createElement('canvas');
                     canvas.width = processedCell.mat.cols;
@@ -1282,14 +1288,15 @@ function processImageWithOpenCV() {
  * @param {number} dynamicThreshold 数字として認める最小面積
  * @returns {{mat: cv.Mat, hasDigit: boolean}} 処理済みMatと、文字が存在するかのフラグ
  */
-function preprocessCell(thresh, dynamicThreshold) {
+function preprocessCell(thresh, globalMaxHeightRatio) {
     // 連結成分解析による数字の特定
     let labels = new cv.Mat();
     let stats = new cv.Mat();
     let centroids = new cv.Mat();
     let nLabels = cv.connectedComponentsWithStats(thresh, labels, stats, centroids);
 
-    let maxArea = 0;
+    let maxCellHeight = thresh.rows;
+    let bestHeight = 0;
     let bestRect = null;
 
     for (let i = 1; i < nLabels; i++) {
@@ -1297,14 +1304,22 @@ function preprocessCell(thresh, dynamicThreshold) {
         let top = stats.intAt(i, cv.CC_STAT_TOP);
         let width = stats.intAt(i, cv.CC_STAT_WIDTH);
         let height = stats.intAt(i, cv.CC_STAT_HEIGHT);
-        let area = stats.intAt(i, cv.CC_STAT_AREA);
 
-        // 枠線の除去: 4x超解像のため 4px マージン
+        let ratio = height / maxCellHeight;
+
+        // フィルタリング条件:
+        // 1. 枠線の除去 (高さ率95%超は枠)
+        // 2. メモ・ノイズ除去 (グローバル最大高さ率の75%以下はメモ)
+        if (ratio > 0.95 || ratio <= globalMaxHeightRatio * 0.75) {
+            continue;
+        }
+
+        // 枠線の除去（物理接触判定）: 4x超解像のため 4px マージン
         let isTouchingBorder = (left <= 4 || top <= 4 || (left + width) >= thresh.cols - 4 || (top + height) >= thresh.rows - 4);
 
         if (!isTouchingBorder) {
-            if (area > maxArea) {
-                maxArea = area;
+            if (height > bestHeight) {
+                bestHeight = height;
                 bestRect = new cv.Rect(left, top, width, height);
             }
         }
@@ -1317,7 +1332,7 @@ function preprocessCell(thresh, dynamicThreshold) {
     let hasDigit = false;
 
     // 数字が見つかった場合、中央に配置
-    if (bestRect && maxArea >= dynamicThreshold) {
+    if (bestRect) {
         hasDigit = true;
         let digitROI = thresh.roi(bestRect);
 
@@ -1675,7 +1690,7 @@ async function startOCRAnalysis() {
                 cv.matchTemplate(itemMat, repMat, res, cv.TM_CCOEFF_NORMED);
                 let mm = cv.minMaxLoc(res);
 
-                if (mm.maxVal > 0.85) {
+                if (mm.maxVal > 0.90) {
                     matchedGroup = group;
                     res.delete(); repMat.delete();
                     break;
@@ -1716,7 +1731,7 @@ async function startOCRAnalysis() {
                     let res = new cv.Mat();
                     cv.matchTemplate(currentMat, cache.mat, res, cv.TM_CCOEFF_NORMED);
                     let mm = cv.minMaxLoc(res);
-                    if (mm.maxVal > 0.85) {
+                    if (mm.maxVal > 0.90) {
                         recognizedNum = cache.digit;
                         res.delete();
                         break;
