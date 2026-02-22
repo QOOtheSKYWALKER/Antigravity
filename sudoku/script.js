@@ -1850,7 +1850,7 @@ function validateAndApplyOcrGrid(grid2D, autoPlay = false) {
         document.querySelector('.ocr-canvas-container').style.display = 'flex';
 
         // メッセージを強調表示
-        const warningText = manualStatePanel.querySelector('p:nth-child(2)');
+        const warningText = manualStatePanel.querySelector('.manual-hint');
         if (warningText) {
             warningText.style.backgroundColor = 'rgba(255, 204, 0, 0.2)';
             warningText.style.padding = '5px';
