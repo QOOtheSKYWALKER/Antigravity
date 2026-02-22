@@ -87,26 +87,32 @@ class SudokuLogicalSolver {
             if (this.applyNakedSingle()) { changed = true; continue; }
             if (this.applyHiddenSingle()) { changed = true; continue; }
 
-            // 2. Easy (Locked Candidates)
+            // 2. Easy (Reserved for future easy techniques)
             if (maxRank >= 2) {
-                if (this.applyLockedCandidates()) { changed = true; continue; }
+                // Currently no specific easy techniques after singles
             }
 
-            // 3. Medium (Pairs, Triples)
+            // 3. Medium (Locked Candidates, Pairs, Triples, Quads)
             if (maxRank >= 3) {
+                if (this.applyLockedCandidates()) { changed = true; continue; }
                 if (this.applyNakedPair()) { changed = true; continue; }
                 if (this.applyHiddenPair()) { changed = true; continue; }
                 if (this.applyNakedTriple()) { changed = true; continue; }
                 if (this.applyHiddenTriple()) { changed = true; continue; }
+                if (this.applyNakedQuad()) { changed = true; continue; }
+                if (this.applyHiddenQuad()) { changed = true; continue; }
             }
 
-            // 4. Hard (Fish, Wings, Skyscraper)
+            // 4. Hard (Fish, Wings, Chains, Rectangles)
             if (maxRank >= 4) {
                 if (this.applyXWing()) { changed = true; continue; }
-                if (this.applyYWing()) { changed = true; continue; }
                 if (this.applySwordfish()) { changed = true; continue; }
-                if (this.applySkyscraper()) { changed = true; continue; }
+                if (this.applyJellyfish()) { changed = true; continue; }
+                if (this.applyYWing()) { changed = true; continue; }
                 if (this.applyWWing()) { changed = true; continue; }
+                if (this.applySkyscraper()) { changed = true; continue; }
+                if (this.applyUniqueRectangleType1()) { changed = true; continue; }
+                if (this.applyXYChain()) { changed = true; continue; }
             }
         }
 
@@ -135,18 +141,23 @@ class SudokuLogicalSolver {
         const levels = {
             'Naked Single': 'basic',
             'Hidden Single': 'basic',
-            'Locked Candidates': 'easy',
-            'Locked Candidates (Pointing)': 'easy',
-            'Locked Candidates (Claiming)': 'easy',
+            'Locked Candidates': 'medium',
+            'Locked Candidates (Pointing)': 'medium',
+            'Locked Candidates (Claiming)': 'medium',
             'Naked Pair': 'medium',
             'Hidden Pair': 'medium',
             'Naked Triple': 'medium',
             'Hidden Triple': 'medium',
+            'Naked Quad': 'medium',
+            'Hidden Quad': 'medium',
             'X-Wing': 'hard',
-            'Y-Wing': 'hard',
             'Swordfish': 'hard',
+            'Jellyfish': 'hard',
+            'Y-Wing': 'hard',
+            'W-Wing': 'hard',
             'Skyscraper': 'hard',
-            'W-Wing': 'hard'
+            'Unique Rectangle (Type 1)': 'hard',
+            'XY-Chain': 'hard'
         };
 
         let maxDifficulty = 'basic';
@@ -440,6 +451,120 @@ class SudokuLogicalSolver {
                                     this.candidates[cell.r][cell.c].delete(n);
                                     changed = true;
                                     this.difficultyLog.push({ technique: 'Hidden Triple', r: cell.r, c: cell.c, nums: [n1, n2, n3] });
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        return changed;
+    }
+
+    /**
+     * Naked Quad: あるユニット内で4つのセルの候補の和集合が4数字以下の場合
+     * その4数字を他のセルから除外できる
+     */
+    applyNakedQuad() {
+        let changed = false;
+        const regions = this.getAllRegions();
+
+        for (const region of regions) {
+            const emptyCells = region.filter(({ r, c }) =>
+                this.grid[r][c] === 0 && this.candidates[r][c].size >= 2 && this.candidates[r][c].size <= 4
+            );
+
+            if (emptyCells.length < 4) continue;
+
+            for (let i = 0; i < emptyCells.length; i++) {
+                for (let j = i + 1; j < emptyCells.length; j++) {
+                    for (let k = j + 1; k < emptyCells.length; k++) {
+                        for (let l = k + 1; l < emptyCells.length; l++) {
+                            const union = new Set([
+                                ...this.candidates[emptyCells[i].r][emptyCells[i].c],
+                                ...this.candidates[emptyCells[j].r][emptyCells[j].c],
+                                ...this.candidates[emptyCells[k].r][emptyCells[k].c],
+                                ...this.candidates[emptyCells[l].r][emptyCells[l].c]
+                            ]);
+
+                            if (union.size !== 4) continue;
+
+                            const quadNums = [...union];
+                            const quadCells = [emptyCells[i], emptyCells[j], emptyCells[k], emptyCells[l]];
+
+                            for (const { r, c } of region) {
+                                if (this.grid[r][c] !== 0) continue;
+                                if (quadCells.some(qc => qc.r === r && qc.c === c)) continue;
+
+                                for (const num of quadNums) {
+                                    if (this.candidates[r][c].has(num)) {
+                                        this.candidates[r][c].delete(num);
+                                        changed = true;
+                                        this.difficultyLog.push({ technique: 'Naked Quad', r, c, nums: quadNums });
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        return changed;
+    }
+
+    /**
+     * Hidden Quad: あるユニット内で4つの数字が4つのセルにしか現れない場合
+     * その4セルから他の候補を除外できる
+     */
+    applyHiddenQuad() {
+        let changed = false;
+        const regions = this.getAllRegions();
+
+        for (const region of regions) {
+            const numPositions = {};
+            for (let n = 1; n <= 9; n++) numPositions[n] = [];
+
+            for (const { r, c } of region) {
+                if (this.grid[r][c] === 0) {
+                    for (const n of this.candidates[r][c]) {
+                        numPositions[n].push({ r, c });
+                    }
+                }
+            }
+
+            const candidateNums = [];
+            for (let n = 1; n <= 9; n++) {
+                if (numPositions[n].length >= 2 && numPositions[n].length <= 4) {
+                    candidateNums.push(n);
+                }
+            }
+
+            if (candidateNums.length < 4) continue;
+
+            for (let i = 0; i < candidateNums.length; i++) {
+                for (let j = i + 1; j < candidateNums.length; j++) {
+                    for (let k = j + 1; k < candidateNums.length; k++) {
+                        for (let l = k + 1; l < candidateNums.length; l++) {
+                            const n1 = candidateNums[i];
+                            const n2 = candidateNums[j];
+                            const n3 = candidateNums[k];
+                            const n4 = candidateNums[l];
+
+                            const cellSet = new Map();
+                            for (const pos of [...numPositions[n1], ...numPositions[n2], ...numPositions[n3], ...numPositions[n4]]) {
+                                cellSet.set(`${pos.r},${pos.c}`, pos);
+                            }
+
+                            if (cellSet.size !== 4) continue;
+
+                            const quadNums = new Set([n1, n2, n3, n4]);
+                            for (const [, cell] of cellSet) {
+                                for (const n of [...this.candidates[cell.r][cell.c]]) {
+                                    if (!quadNums.has(n)) {
+                                        this.candidates[cell.r][cell.c].delete(n);
+                                        changed = true;
+                                        this.difficultyLog.push({ technique: 'Hidden Quad', r: cell.r, c: cell.c, nums: [n1, n2, n3, n4] });
+                                    }
                                 }
                             }
                         }
@@ -872,6 +997,115 @@ class SudokuLogicalSolver {
     }
 
     /**
+     * Jellyfish
+     * Swordfish (3x3) の 4x4 版
+     */
+    applyJellyfish() {
+        let changed = false;
+
+        // 1. Rows -> Cols
+        for (let num = 1; num <= 9; num++) {
+            const potentialRows = [];
+            for (let r = 0; r < 9; r++) {
+                const cols = [];
+                for (let c = 0; c < 9; c++) {
+                    if (this.grid[r][c] === 0 && this.candidates[r][c].has(num)) {
+                        cols.push(c);
+                    }
+                }
+                if (cols.length >= 2 && cols.length <= 4) {
+                    potentialRows.push({ r, cols });
+                }
+            }
+
+            if (potentialRows.length >= 4) {
+                const combos = this.getCombinations(potentialRows, 4);
+                for (const rows of combos) {
+                    const unionCols = new Set();
+                    rows.forEach(row => row.cols.forEach(c => unionCols.add(c)));
+
+                    if (unionCols.size === 4) {
+                        const targetCols = [...unionCols];
+                        const targetRowIndices = rows.map(ro => ro.r);
+
+                        for (const c of targetCols) {
+                            for (let r = 0; r < 9; r++) {
+                                if (!targetRowIndices.includes(r)) {
+                                    if (this.grid[r][c] === 0 && this.candidates[r][c].has(num)) {
+                                        this.candidates[r][c].delete(num);
+                                        changed = true;
+                                        this.difficultyLog.push({ technique: 'Jellyfish', rows: targetRowIndices, cols: targetCols, num });
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        // 2. Cols -> Rows
+        for (let num = 1; num <= 9; num++) {
+            const potentialCols = [];
+            for (let c = 0; c < 9; c++) {
+                const rows = [];
+                for (let r = 0; r < 9; r++) {
+                    if (this.grid[r][c] === 0 && this.candidates[r][c].has(num)) {
+                        rows.push(r);
+                    }
+                }
+                if (rows.length >= 2 && rows.length <= 4) {
+                    potentialCols.push({ c, rows });
+                }
+            }
+
+            if (potentialCols.length >= 4) {
+                const combos = this.getCombinations(potentialCols, 4);
+                for (const cols of combos) {
+                    const unionRows = new Set();
+                    cols.forEach(col => col.rows.forEach(r => unionRows.add(r)));
+
+                    if (unionRows.size === 4) {
+                        const targetRows = [...unionRows];
+                        const targetColIndices = cols.map(co => co.c);
+
+                        for (const r of targetRows) {
+                            for (let c = 0; c < 9; c++) {
+                                if (!targetColIndices.includes(c)) {
+                                    if (this.grid[r][c] === 0 && this.candidates[r][c].has(num)) {
+                                        this.candidates[r][c].delete(num);
+                                        changed = true;
+                                        this.difficultyLog.push({ technique: 'Jellyfish', rows: targetRows, cols: targetColIndices, num });
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        return changed;
+    }
+
+    getCombinations(arr, k) {
+        const results = [];
+        const f = (start, combo) => {
+            if (combo.length === k) {
+                results.push([...combo]);
+                return;
+            }
+            for (let i = start; i < arr.length; i++) {
+                combo.push(arr[i]);
+                f(i + 1, combo);
+                combo.pop();
+            }
+        };
+        f(0, []);
+        return results;
+    }
+
+    /**
      * Skyscraper (Turbot Fish の一種)
      * ある数字が2つの列(or行)それぞれにちょうど2箇所ずつあり、
      * そのうち片方の端が同じ行(or列)を共有する場合、
@@ -1058,6 +1292,149 @@ class SudokuLogicalSolver {
         }
 
         return changed;
+    }
+
+    /**
+     * Unique Rectangle (Type 1)
+     * 2通りの解（デッドリーパターン）を避けるため、長方形の4マスのうち、
+     * 3マスが{A, B}で1マスが{A, B, C}の場合、その1マスからA, Bを除外できる。
+     */
+    applyUniqueRectangleType1() {
+        let changed = false;
+        // ブロックの組み合わせ（水平・垂直に並ぶ2ブロックペア）
+        const blockPairs = [];
+        // 水平ペア
+        for (let r = 0; r < 3; r++) {
+            blockPairs.push([[r, 0], [r, 1]], [[r, 1], [r, 2]], [[r, 0], [r, 2]]);
+        }
+        // 垂直ペア
+        for (let c = 0; c < 3; c++) {
+            blockPairs.push([[0, c], [1, c]], [[1, c], [2, c]], [[0, c], [2, c]]);
+        }
+
+        for (const [b1, b2] of blockPairs) {
+            const isHorizontal = b1[0] === b2[0];
+
+            if (isHorizontal) {
+                const rStart = b1[0] * 3;
+                for (let i = 0; i < 3; i++) {
+                    for (let j = i + 1; j < 3; j++) {
+                        const r1 = rStart + i;
+                        const r2 = rStart + j;
+                        for (let c1 = b1[1] * 3; c1 < b1[1] * 3 + 3; c1++) {
+                            for (let c2 = b2[1] * 3; c2 < b2[1] * 3 + 3; c2++) {
+                                if (this.checkURType1(r1, c1, r1, c2, r2, c1, r2, c2)) changed = true;
+                            }
+                        }
+                    }
+                }
+            } else {
+                const cStart = b1[1] * 3;
+                for (let i = 0; i < 3; i++) {
+                    for (let j = i + 1; j < 3; j++) {
+                        const c1 = cStart + i;
+                        const c2 = cStart + j;
+                        for (let r1 = b1[0] * 3; r1 < b1[0] * 3 + 3; r1++) {
+                            for (let r2 = b2[0] * 3; r2 < b2[0] * 3 + 3; r2++) {
+                                if (this.checkURType1(r1, c1, r2, c1, r1, c2, r2, c2)) changed = true;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        return changed;
+    }
+
+    checkURType1(r1, c1, r2, c2, r3, c3, r4, c4) {
+        const cells = [{ r: r1, c: c1 }, { r: r2, c: c2 }, { r: r3, c: c3 }, { r: r4, c: c4 }];
+        if (cells.some(cell => this.grid[cell.r][cell.c] !== 0)) return false;
+
+        const bivalueCells = cells.filter(cell => this.candidates[cell.r][cell.c].size === 2);
+        const extraCell = cells.filter(cell => this.candidates[cell.r][cell.c].size > 2);
+
+        if (bivalueCells.length !== 3 || extraCell.length !== 1) return false;
+
+        const c1ands = [...this.candidates[bivalueCells[0].r][bivalueCells[0].c]];
+        for (let i = 1; i < 3; i++) {
+            if (!this.setsAreEqual(this.candidates[bivalueCells[0].r][bivalueCells[0].c], this.candidates[bivalueCells[i].r][bivalueCells[i].c])) return false;
+        }
+
+        const [A, B] = c1ands;
+        const target = extraCell[0];
+        const targetCands = this.candidates[target.r][target.c];
+
+        if (targetCands.has(A) && targetCands.has(B)) {
+            targetCands.delete(A);
+            targetCands.delete(B);
+            this.difficultyLog.push({ technique: 'Unique Rectangle (Type 1)', r: target.r, c: target.c, nums: [A, B] });
+            return true;
+        }
+        return false;
+    }
+
+    /**
+     * XY-Chain
+     * 端点の候補の1つ（数字Xとする）が、連鎖の両端のどちらかで必ず「真」になる場合、
+     * 両方の端点から見えるセルからXを削除できる。
+     */
+    applyXYChain() {
+        let changed = false;
+        const bivalueCells = [];
+        for (let r = 0; r < 9; r++) {
+            for (let c = 0; c < 9; c++) {
+                if (this.grid[r][c] === 0 && this.candidates[r][c].size === 2) {
+                    bivalueCells.push({ r, c, cands: [...this.candidates[r][c]] });
+                }
+            }
+        }
+
+        if (bivalueCells.length < 3) return false;
+
+        for (const startCell of bivalueCells) {
+            for (const startNum of startCell.cands) {
+                const otherNum = startCell.cands.find(n => n !== startNum);
+                const path = [startCell];
+                if (this.findXYChain(otherNum, startNum, path, bivalueCells)) {
+                    const endCell = path[path.length - 1];
+                    if (path.length >= 3) {
+                        for (let r = 0; r < 9; r++) {
+                            for (let c = 0; c < 9; c++) {
+                                if (this.grid[r][c] === 0 && this.candidates[r][c].has(startNum)) {
+                                    if (this.sees(r, c, startCell.r, startCell.c) && this.sees(r, c, endCell.r, endCell.c)) {
+                                        if (!(r === startCell.r && c === startCell.c) && !(r === endCell.r && c === endCell.c)) {
+                                            this.candidates[r][c].delete(startNum);
+                                            changed = true;
+                                            this.difficultyLog.push({ technique: 'XY-Chain', num: startNum, length: path.length });
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                        if (changed) return true;
+                    }
+                }
+            }
+        }
+        return changed;
+    }
+
+    findXYChain(targetNum, startNum, path, bivalueCells) {
+        const currentCell = path[path.length - 1];
+        for (const nextCell of bivalueCells) {
+            if (path.some(p => p.r === nextCell.r && p.c === nextCell.c)) continue;
+
+            if (this.sees(currentCell.r, currentCell.c, nextCell.r, nextCell.c)) {
+                if (nextCell.cands.includes(targetNum)) {
+                    const nextOtherNum = nextCell.cands.find(n => n !== targetNum);
+                    path.push(nextCell);
+                    if (nextOtherNum === startNum) return true;
+                    if (this.findXYChain(nextOtherNum, startNum, path, bivalueCells)) return true;
+                    path.pop();
+                }
+            }
+        }
+        return false;
     }
 
     // ===== HELPER METHODS =====
