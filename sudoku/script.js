@@ -1316,12 +1316,14 @@ function preprocessCell(thresh, dynamicThreshold) {
 
     let hasDigit = false;
 
-    // 数字が見つかった場合、元の位置で出力
+    // 数字が見つかった場合、中央に配置
     if (bestRect && maxArea >= dynamicThreshold) {
         hasDigit = true;
         let digitROI = thresh.roi(bestRect);
 
-        let targetRect = new cv.Rect(bestRect.x, bestRect.y, bestRect.width, bestRect.height);
+        let targetX = Math.floor((output.cols - bestRect.width) / 2);
+        let targetY = Math.floor((output.rows - bestRect.height) / 2);
+        let targetRect = new cv.Rect(targetX, targetY, bestRect.width, bestRect.height);
 
         let processedDigit = new cv.Mat();
         // 白背景用反転（文字を黒にする）
