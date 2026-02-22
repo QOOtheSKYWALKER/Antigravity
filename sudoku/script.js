@@ -1128,11 +1128,6 @@ function processImageWithOpenCV() {
             let mask = new cv.Mat();
             cv.add(horizontal, vertical, mask);
 
-            // 隙間を埋めるための膨張処理 (角の接続を強化)
-            let kernel = cv.getStructuringElement(cv.MORPH_RECT, new cv.Size(3, 3));
-            cv.dilate(mask, mask, kernel);
-            kernel.delete();
-
             // 4. 枠（最大の正方形に近い矩形）を抽出
             let contours = new cv.MatVector();
             let hierarchy = new cv.Mat();
@@ -1179,8 +1174,8 @@ function processImageWithOpenCV() {
 
             const cellWidthBig = grayBig.cols / 9;
             const cellHeightBig = grayBig.rows / 9;
-            const marginWBig = cellWidthBig * 0.03;
-            const marginHBig = cellHeightBig * 0.03;
+            const marginWBig = 0;
+            const marginHBig = 0;
 
             // --- Phase 1: 高さ率の統計収集 ---
             ocrStatus.textContent = '盤面の統計情報を解析中...';
@@ -1216,8 +1211,7 @@ function processImageWithOpenCV() {
 
                         let ratio = ch / cellHeightBig;
                         // 枠（95%以上）を除外して統計をとる
-                        let isTouching = (cl <= 4 || ct <= 4 || (cl + cw) >= cellThresh.cols - 4 || (ct + ch) >= cellThresh.rows - 4);
-                        if (!isTouching && ratio <= 0.95) {
+                        if (ratio <= 0.95) {
                             if (ratio > currentMaxRatio) currentMaxRatio = ratio;
                         }
                     }
@@ -1309,19 +1303,14 @@ function preprocessCell(thresh, globalMaxHeightRatio) {
 
         // フィルタリング条件:
         // 1. 枠線の除去 (高さ率95%超は枠)
-        // 2. メモ・ノイズ除去 (グローバル最大高さ率の75%以下はメモ)
-        if (ratio > 0.95 || ratio <= globalMaxHeightRatio * 0.75) {
+        // 2. メモ・ノイズ除去 (グローバル最大高さ率の70%以下はメモ)
+        if (ratio > 0.95 || ratio <= globalMaxHeightRatio * 0.70) {
             continue;
         }
 
-        // 枠線の除去（物理接触判定）: 4x超解像のため 4px マージン
-        let isTouchingBorder = (left <= 4 || top <= 4 || (left + width) >= thresh.cols - 4 || (top + height) >= thresh.rows - 4);
-
-        if (!isTouchingBorder) {
-            if (height > bestHeight) {
-                bestHeight = height;
-                bestRect = new cv.Rect(left, top, width, height);
-            }
+        if (height > bestHeight) {
+            bestHeight = height;
+            bestRect = new cv.Rect(left, top, width, height);
         }
     }
 
